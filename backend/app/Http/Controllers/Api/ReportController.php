@@ -36,7 +36,7 @@ class ReportController extends Controller
 
             $totalBalance = Account::sum('balance');
 
-            $expensesByCategory = Transaction::where('type', 'depense')
+            $expensesByCategory = Transaction::where('transactions.type', 'depense')
                 ->whereBetween('transaction_date', [$startDate, $endDate])
                 ->join('transaction_categories', 'transactions.transaction_category_id', '=', 'transaction_categories.id')
                 ->select('transaction_categories.name', DB::raw('SUM(transactions.amount) as total'))
