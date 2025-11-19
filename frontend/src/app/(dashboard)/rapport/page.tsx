@@ -259,7 +259,7 @@ export default function RapportPage() {
   const downloadFile = async (url: string, filename: string) => {
     try {
       const res = await api.get(url, {
-        responseType: "blob",
+        responseType: "blob", // IMPORTANT
       });
 
       const blobUrl = window.URL.createObjectURL(new Blob([res.data]));

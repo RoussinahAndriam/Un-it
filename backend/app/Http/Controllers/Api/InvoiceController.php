@@ -121,7 +121,11 @@ class InvoiceController extends Controller
                     'transaction_category_id' => $validated['transaction_category_id'] ?? null,
                     'type' => $invoice->type == 'client' ? 'revenu' : 'depense',
                     'amount' => $validated['amount'],
-                    'description' => $validated['description'] ?? 'Paiement Facture #' . $invoice->invoice_number,
+                    'description' => $validated['description'] ?? (
+                        $invoice->type == 'client' 
+                            ? 'Paiement Facture Client #' . $invoice->invoice_number
+                            : 'Paiement Facture Fournisseur #' . $invoice->invoice_number
+                    ),
                     'transaction_date' => $validated['payment_date'],
                 ]);
                 

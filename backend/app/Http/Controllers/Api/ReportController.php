@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Transaction;
 use App\Models\Account;
 use App\Models\Asset;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
@@ -187,14 +188,6 @@ class ReportController extends Controller
         try {
             $year = $request->get('year', date('Y'));
             
-            // Ici vous utiliseriez un package comme Maatwebsite/Laravel-Excel
-            // Pour l'exemple, on retourne un message
-            return response()->json([
-                'success' => true,
-                'message' => 'Export Excel généré pour l\'année ' . $year,
-                'download_url' => '/storage/exports/transactions_' . $year . '.xlsx'
-            ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -212,18 +205,70 @@ class ReportController extends Controller
         try {
             $year = $request->get('year', date('Y'));
             
-            // Ici vous utiliseriez un package comme barryvdh/laravel-dompdf
-            return response()->json([
-                'success' => true,
-                'message' => 'Export PDF généré pour l\'année ' . $year,
-                'download_url' => '/storage/exports/transactions_' . $year . '.pdf'
-            ], 200);
+            // Récupération des transactions avec les relations
+            $transactions = Transaction::with(['account', 'category'])
+                ->whereYear('transaction_date', $year)
+                ->orderBy('transaction_date', 'asc')
+                ->get();
+
+            // Calcul des totaux
+            $totalIncome = $transactions->where('type', 'revenu')->sum('amount');
+            $totalExpense = $transactions->where('type', 'depense')->sum('amount');
+            $netAmount = $totalIncome - $totalExpense;
+
+            // Récupération des comptes avec leurs soldes
+            $accounts = Account::with(['transactions' => function($query) use ($year) {
+                $query->whereYear('transaction_date', $year);
+            }])->get();
+
+            // Calcul des soldes par compte pour l'année
+            $accountBalances = [];
+            foreach ($accounts as $account) {
+                $accountIncome = $account->transactions->where('type', 'revenu')->sum('amount');
+                $accountExpense = $account->transactions->where('type', 'depense')->sum('amount');
+                $accountNet = $accountIncome - $accountExpense;
+                
+                $accountBalances[] = [
+                    'name' => $account->name,
+                    'type' => $account->type,
+                    'balance' => $account->balance,
+                    'currency' => $account->currency,
+                    'year_income' => $accountIncome,
+                    'year_expense' => $accountExpense,
+                    'year_net' => $accountNet
+                ];
+            }
+
+            $stats = [
+                'total_income' => $totalIncome,
+                'total_expense' => $totalExpense,
+                'net_amount' => $netAmount,
+                'total_transactions' => $transactions->count(),
+                'year' => $year,
+                'account_balances' => $accountBalances
+            ];
+
+            // Génération PDF avec une vue
+            $pdf = Pdf::loadView('exports.transactions', [
+                'year' => $year,
+                'transactions' => $transactions,
+                'stats' => $stats
+            ])
+            ->setPaper('a4', 'portrait')
+            ->setOption('margin-top', 10)
+            ->setOption('margin-bottom', 10)
+            ->setOption('margin-left', 10)
+            ->setOption('margin-right', 10);
+
+            $fileName = "rapport_transactions_{$year}_" . now()->format('Y-m-d') . ".pdf";
+
+            return $pdf->download($fileName); 
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur lors de l\'export PDF.',
-                'error' => config('app.debug') ? $e->getMessage() : 'Erreur interne du serveur'
+                'error' => config('app.debug') ? $e->getMessage() : 'Erreur interne'
             ], 500);
         }
     }

@@ -31,7 +31,7 @@
         }
         
         .invoice-header {
-            background: linear-gradient(135deg, #1e40af, #3b82f6);
+            background: linear-gradient(135deg, #2c5aa0, #3a6bc5);
             color: white;
             padding: 40px;
             text-align: center;
@@ -73,7 +73,7 @@
         }
         
         .info-section h3 {
-            color: #1e40af;
+            color: #2c5aa0;
             font-size: 16px;
             font-weight: 600;
             margin-bottom: 15px;
@@ -85,7 +85,7 @@
             background: #f8fafc;
             border-radius: 8px;
             padding: 20px;
-            border-left: 4px solid #3b82f6;
+            border-left: 4px solid #2c5aa0;
         }
         
         .info-item {
@@ -167,7 +167,7 @@
         }
         
         .amount-total {
-            color: #1e40af;
+            color: #2c5aa0;
         }
         
         .amount-paid {
@@ -372,19 +372,19 @@
                 <div class="amount-grid">
                     <div class="amount-item">
                         <div class="amount-label">Sous-total</div>
-                        <div class="amount-value">{{ number_format($invoice->subtotal, 2, ',', ' ') }} €</div>
+                        <div class="amount-value">{{ number_format($invoice->subtotal, 2, ',', ' ') }} Ar</div>
                     </div>
                     <div class="amount-item">
                         <div class="amount-label">TVA</div>
-                        <div class="amount-value">{{ number_format($invoice->tax_amount, 2, ',', ' ') }} €</div>
+                        <div class="amount-value">{{ number_format($invoice->tax_amount, 2, ',', ' ') }} Ar</div>
                     </div>
                     <div class="amount-item">
                         <div class="amount-label amount-total">Total</div>
-                        <div class="amount-value amount-total">{{ number_format($invoice->total_amount, 2, ',', ' ') }} €</div>
+                        <div class="amount-value amount-total">{{ number_format($invoice->total_amount, 2, ',', ' ') }} Ar</div>
                     </div>
                     <div class="amount-item">
                         <div class="amount-label amount-paid">Payé</div>
-                        <div class="amount-value amount-paid">{{ number_format($invoice->amount_paid, 2, ',', ' ') }} €</div>
+                        <div class="amount-value amount-paid">{{ number_format($invoice->amount_paid, 2, ',', ' ') }} Ar</div>
                     </div>
                 </div>
                 
@@ -396,7 +396,7 @@
                 <div style="text-align: center; margin-top: 20px;">
                     <div class="amount-label amount-due">SOLDE RESTANT À PAYER</div>
                     <div class="amount-value amount-due" style="font-size: 28px;">
-                        {{ number_format($balance_due, 2, ',', ' ') }} €
+                        {{ number_format($balance_due, 2, ',', ' ') }} Ar
                     </div>
                 </div>
                 @else
@@ -412,7 +412,7 @@
             <!-- Lignes de facture -->
             @if($invoice->lines->count() > 0)
             <div class="lines-section">
-                <h3 style="color: #1e40af; margin-bottom: 20px;">DÉTAIL DES ARTICLES</h3>
+                <h3 style="color: #2c5aa0; margin-bottom: 20px;">DÉTAIL DES ARTICLES</h3>
                 <table class="lines-table">
                     <thead>
                         <tr>
@@ -425,10 +425,10 @@
                     <tbody>
                         @foreach($invoice->lines as $line)
                         <tr>
-                            <td>{{ $line->description }}</td>
+                            <td>{{ $line->designation }}</td>
                             <td>{{ $line->quantity }}</td>
-                            <td>{{ number_format($line->unit_price, 2, ',', ' ') }} €</td>
-                            <td>{{ number_format($line->total, 2, ',', ' ') }} €</td>
+                            <td>{{ number_format($line->unit_price, 2, ',', ' ') }} Ar</td>
+                            <td>{{ number_format($line->quantity * $line->unit_price, 2, ',', ' ') }} Ar</td>
                         </tr>
                         @endforeach
                     </tbody>

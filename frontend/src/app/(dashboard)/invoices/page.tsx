@@ -6,6 +6,7 @@ import { useThirdParties, ThirdParty } from "@/hooks/useThirdParties";
 import { InvoiceFiltersComponent } from "@/components/InvoiceFilters";
 import { InvoiceForm } from "@/components/InvoiceForm";
 import { ThirdPartyForm } from "@/components/ThirdPartyForm";
+import { PaymentForm } from "@/components/PaymentForm";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,9 +34,9 @@ import {
   Edit,
   Trash2,
   Eye,
+  CreditCard,
 } from "lucide-react";
 import { formatCurrency } from "@/constants";
-
 
 export default function FacturationPage() {
   const {
@@ -64,6 +65,8 @@ export default function FacturationPage() {
   const [activeTab, setActiveTab] = useState("invoices");
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [showThirdPartyForm, setShowThirdPartyForm] = useState(false);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [editingThirdParty, setEditingThirdParty] = useState<ThirdParty | null>(
     null
@@ -83,7 +86,19 @@ export default function FacturationPage() {
 
   const handleCreateInvoice = async (data: Partial<Invoice>) => {
     try {
-      await createInvoice(data);
+      const createdInvoice = await createInvoice(data);
+
+      // Si le statut est "paye" ou "partiellement_paye", ouvrir le formulaire de paiement
+      if (data.status === "paye" || data.status === "partiellement_paye") {
+        setSelectedInvoice(createdInvoice);
+        setShowPaymentForm(true);
+      }
+
+      // Si le statut est "envoye", envoyer la facture
+      if (data.status === "envoye") {
+        await sendInvoice(createdInvoice.id);
+      }
+
       setShowInvoiceForm(false);
       fetchInvoices(filters);
     } catch (err) {
@@ -95,6 +110,12 @@ export default function FacturationPage() {
     if (editingInvoice) {
       try {
         await updateInvoice(editingInvoice.id, data);
+
+        // Si le statut est "envoye", envoyer la facture
+        if (data.status === "envoye") {
+          await sendInvoice(editingInvoice.id);
+        }
+
         setEditingInvoice(null);
         fetchInvoices(filters);
       } catch (err) {
@@ -143,6 +164,17 @@ export default function FacturationPage() {
     if (confirm("Envoyer cette facture par email ?")) {
       await sendInvoice(id);
       fetchInvoices(filters);
+    }
+  };
+
+  const handleAddPayment = async (invoiceId: number, paymentData: any) => {
+    try {
+      await addPayment(invoiceId, paymentData);
+      setShowPaymentForm(false);
+      setSelectedInvoice(null);
+      fetchInvoices(filters);
+    } catch (err) {
+      console.error("Error adding payment:", err);
     }
   };
 
@@ -241,8 +273,9 @@ export default function FacturationPage() {
                         <TableHead>Tiers</TableHead>
                         <TableHead>Date</TableHead>
                         <TableHead>Montant</TableHead>
+                        <TableHead>Payé</TableHead>
                         <TableHead>Statut</TableHead>
-                        <TableHead className="w-[100px]">Actions</TableHead>
+                        <TableHead className="w-[120px]">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -264,6 +297,9 @@ export default function FacturationPage() {
                           </TableCell>
                           <TableCell className="font-medium">
                             {formatCurrency(invoice.total_amount)}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {formatCurrency(invoice.amount_paid)}
                           </TableCell>
                           <TableCell>
                             <Badge variant={getStatusColor(invoice.status)}>
@@ -287,23 +323,43 @@ export default function FacturationPage() {
                                     Voir
                                   </Link>
                                 </DropdownMenuItem>
+
                                 <DropdownMenuItem
                                   onClick={() => setEditingInvoice(invoice)}
                                 >
                                   <Edit className="h-4 w-4 mr-2" />
                                   Modifier
                                 </DropdownMenuItem>
-                                {invoice.type === "client" &&
-                                  invoice.status === "brouillon" && (
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        handleSendInvoice(invoice.id)
-                                      }
-                                    >
-                                      <Send className="h-4 w-4 mr-2" />
-                                      Envoyer
-                                    </DropdownMenuItem>
-                                  )}
+
+                                {invoice.type === "client" && (
+                                  <>
+                                    {invoice.status === "brouillon" && (
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          handleSendInvoice(invoice.id)
+                                        }
+                                      >
+                                        <Send className="h-4 w-4 mr-2" />
+                                        Envoyer
+                                      </DropdownMenuItem>
+                                    )}
+                                  </>
+                                )}
+
+                                {(invoice.status === "brouillon" ||
+                                  invoice.status === "envoye" ||
+                                  invoice.status === "partiellement_paye") && (
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedInvoice(invoice);
+                                      setShowPaymentForm(true);
+                                    }}
+                                  >
+                                    <CreditCard className="h-4 w-4 mr-2" />
+                                    Ajouter Paiement
+                                  </DropdownMenuItem>
+                                )}
+
                                 <DropdownMenuItem
                                   onClick={() =>
                                     handleDeleteInvoice(invoice.id)
@@ -494,6 +550,29 @@ export default function FacturationPage() {
                 onSubmit={handleUpdateThirdParty}
                 onCancel={() => setEditingThirdParty(null)}
                 loading={thirdPartiesLoading}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {showPaymentForm && selectedInvoice && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle>Ajouter un Paiement</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PaymentForm
+                invoice={selectedInvoice}
+                onSubmit={(paymentData) =>
+                  handleAddPayment(selectedInvoice.id, paymentData)
+                }
+                onCancel={() => {
+                  setShowPaymentForm(false);
+                  setSelectedInvoice(null);
+                }}
+                loading={invoicesLoading}
               />
             </CardContent>
           </Card>
