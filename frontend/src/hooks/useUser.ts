@@ -3,9 +3,6 @@ import api from "@/lib/api";
 
 export type UserRole = "admin" | "comptable" | "employe";
 
-//udjdjdjjd
-//jdjdjd
-
 export interface User {
   id: number;
   name: string;
@@ -36,20 +33,15 @@ export interface ChangePasswordData {
 }
 
 interface UseUserReturn {
-  // State
   users: User[];
   currentUser: User | null;
   loading: boolean;
   error: string | null;
-
-  // Actions
   fetchUsers: () => Promise<void>;
   fetchCurrentUser: () => Promise<User>;
   createUser: (data: CreateUserData) => Promise<User>;
   updateUser: (id: number, data: UpdateUserData) => Promise<User>;
   deleteUser: (id: number) => Promise<void>;
-
-  // Utilitaires
   clearError: () => void;
   getUserById: (id: number) => User | undefined;
   getUsersByRole: (role: UserRole) => User[];
@@ -81,7 +73,7 @@ export const useUser = (): UseUserReturn => {
       clearError();
 
       const response = await api.get("/users");
-      setUsers(response.data.data);
+      setUsers(response.data.data || response.data); // Support both formats
     } catch (error: any) {
       handleError(error, "Erreur lors du chargement des utilisateurs");
     } finally {
@@ -95,7 +87,7 @@ export const useUser = (): UseUserReturn => {
       clearError();
 
       const response = await api.get("/user");
-      const user = response.data.data;
+      const user = response.data.data || response.data; // Support both formats
       setCurrentUser(user);
       return user;
     } catch (error: any) {
@@ -115,7 +107,7 @@ export const useUser = (): UseUserReturn => {
         clearError();
 
         const response = await api.post("/users", data);
-        const newUser = response.data.data;
+        const newUser = response.data.data || response.data; // Support both formats
 
         setUsers((prev) => [...prev, newUser]);
         return newUser;
@@ -135,7 +127,7 @@ export const useUser = (): UseUserReturn => {
         clearError();
 
         const response = await api.put(`/users/${id}`, data);
-        const updatedUser = response.data.data;
+        const updatedUser = response.data.data || response.data; // Support both formats
 
         setUsers((prev) =>
           prev.map((user) => (user.id === id ? updatedUser : user))
@@ -180,7 +172,6 @@ export const useUser = (): UseUserReturn => {
     [clearError]
   );
 
-  
   const getUserById = useCallback(
     (id: number): User | undefined => {
       return users.find((user) => user.id === id);
@@ -195,10 +186,8 @@ export const useUser = (): UseUserReturn => {
     [users]
   );
 
-
   return {
-    users,
-    currentUser,
+    users, currentUser,
     loading,
     error,
     fetchUsers,

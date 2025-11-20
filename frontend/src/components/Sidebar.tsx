@@ -59,7 +59,7 @@ const menuSections = [
     name: "Système",
     items: [
       { name: "Applications UN-IT", href: "/applications", icon: AppWindow },
-      { name: "Administration", href: "/admin", icon: Settings },
+      { name: "Administration", href: "/Admindashboard", icon: Settings },
       // { name: "Auth", href: "/auth", icon: User },
     ],
   },
