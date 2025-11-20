@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\exportController;
 use App\Http\Controllers\Api\pdfController;
 use App\Http\Controllers\Api\RapportController;
+use App\Http\Controllers\Api\SecurityController;
+use App\Http\Controllers\Api\SettingsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -72,5 +74,11 @@ Route::middleware('auth:sanctum')->group(function () {
  Route::get('/reports/monthly-stats', [ReportController::class, 'monthlyStats']);
     Route::get('/reports/export/excel', [ReportController::class, 'exportExcel']);
     Route::get('/reports/export/pdf', [ReportController::class, 'exportPdf']);
+
+       Route::get('admin/security/logs', [SecurityController::class, 'getLogs']);
+    Route::post('admin/security/password-policy', [SecurityController::class, 'updatePasswordPolicy']);
+    Route::get('admin/settings', [SettingsController::class, 'index']);
+    Route::put('admin/settings', [SettingsController::class, 'update']);
+    Route::post('admin/users/{user}/reset-password', [UserController::class, 'resetPassword']);
 
 });
