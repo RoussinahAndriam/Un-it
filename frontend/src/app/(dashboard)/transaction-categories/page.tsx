@@ -26,6 +26,8 @@ import {
   Loader2,
   Edit,
   Trash2,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -43,12 +45,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
-const getTransactionTypeColor = (type: TransactionType) => {
-  return type === "revenu"
-    ? "bg-green-100 text-green-800 border-green-200"
-    : "bg-red-100 text-red-800 border-red-200";
-};
+// ... (getTransactionTypeColor si vous l'utilisez)
 
 export default function TransactionCategoriesPage() {
   const {
@@ -67,6 +67,7 @@ export default function TransactionCategoriesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [formError, setFormError] = useState("");
 
   const [formData, setFormData] = useState<CreateTransactionCategoryData>({
     name: "",
@@ -77,23 +78,93 @@ export default function TransactionCategoriesPage() {
     fetchCategories();
   }, []);
 
+  const isNameDuplicate = (name: string, excludeId?: string) => {
+    return categories.some(
+      (category) =>
+        category.name.toLowerCase() === name.toLowerCase() &&
+        category.id !== excludeId
+    );
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     clearError();
+    setFormError("");
+
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
+      setFormError("Le nom de la catégorie est requis");
+      setSubmitting(false);
+      return;
+    }
+
+    if (isEditMode && selectedCategory) {
+      if (
+        trimmedName !== selectedCategory.name &&
+        isNameDuplicate(trimmedName, selectedCategory.id)
+      ) {
+        setFormError("Une catégorie avec ce nom existe déjà");
+        setSubmitting(false);
+        return;
+      }
+    } else {
+      if (isNameDuplicate(trimmedName)) {
+        setFormError("Une catégorie avec ce nom existe déjà");
+        setSubmitting(false);
+        return;
+      }
+    }
 
     try {
       if (isEditMode && selectedCategory) {
-        await updateCategory(selectedCategory.id, formData);
+        await updateCategory(selectedCategory.id, {
+          ...formData,
+          name: trimmedName,
+        });
+
+        // TOAST SIMPLIFIÉ - Testez d'abord ça
+        toast.success("Catégorie modifiée avec succès");
       } else {
-        await createCategory(formData);
+        await createCategory({
+          ...formData,
+          name: trimmedName,
+        });
+
+        // TOAST SIMPLIFIÉ
+        toast.success("Catégorie créée avec succès");
       }
       resetForm();
       setIsDialogOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur:", err);
+      if (
+        err.message?.includes("already been taken") ||
+        err.message?.includes("déjà pris")
+      ) {
+        setFormError("Une catégorie avec ce nom existe déjà");
+        toast.error("Une catégorie avec ce nom existe déjà");
+      } else {
+        setFormError("Erreur lors de l'enregistrement");
+        toast.error("Erreur lors de l'enregistrement");
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteCategory = async (
+    categoryId: string,
+    categoryName: string
+  ) => {
+    // Version simplifiée de la confirmation de suppression
+    if (confirm(`Êtes-vous sûr de vouloir supprimer "${categoryName}" ?`)) {
+      try {
+        await deleteCategory(categoryId);
+        toast.success(`"${categoryName}" a été supprimée`);
+      } catch (error) {
+        toast.error("Impossible de supprimer la catégorie");
+      }
     }
   };
 
@@ -104,6 +175,15 @@ export default function TransactionCategoriesPage() {
     });
     setIsEditMode(false);
     setSelectedCategory(null);
+    setFormError("");
+    clearError();
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      resetForm();
+    }
   };
 
   const revenueCategories = getCategoriesByType("revenu");
@@ -111,6 +191,8 @@ export default function TransactionCategoriesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
+      {/* Le Toaster est maintenant dans le layout, pas besoin de le mettre ici */}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -121,9 +203,12 @@ export default function TransactionCategoriesPage() {
           </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
-            <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+            <Button
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={resetForm}
+            >
               <Plus className="h-4 w-4" />
               Nouvelle Catégorie
             </Button>
@@ -139,19 +224,33 @@ export default function TransactionCategoriesPage() {
                   : "Créez une nouvelle catégorie pour organiser vos transactions"}
               </DialogDescription>
             </DialogHeader>
+
+            {(error || formError) && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{formError || error}</AlertDescription>
+              </Alert>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="name">Nom de la catégorie</Label>
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, name: e.target.value }))
-                  }
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, name: e.target.value }));
+                    if (formError) setFormError("");
+                  }}
                   placeholder="ex: Salaire, Loyer, Nourriture..."
                   required
+                  className={formError ? "border-red-500" : ""}
                 />
+                {formError && (
+                  <p className="text-red-500 text-sm mt-1">{formError}</p>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="type">Type</Label>
                 <Select
@@ -169,8 +268,14 @@ export default function TransactionCategoriesPage() {
                   </SelectContent>
                 </Select>
               </div>
+
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={resetForm}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleDialogOpenChange(false)}
+                  disabled={submitting}
+                >
                   Annuler
                 </Button>
                 <Button
@@ -242,7 +347,9 @@ export default function TransactionCategoriesPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-red-600"
-                        onClick={() => deleteCategory(category.id)}
+                        onClick={() =>
+                          handleDeleteCategory(category.id, category.name)
+                        }
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Supprimer
@@ -309,7 +416,9 @@ export default function TransactionCategoriesPage() {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="text-red-600"
-                        onClick={() => deleteCategory(category.id)}
+                        onClick={() =>
+                          handleDeleteCategory(category.id, category.name)
+                        }
                       >
                         <Trash2 className="h-4 w-4 mr-2" />
                         Supprimer

@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/constants";
+import { toast } from "sonner";
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "Non définie";
@@ -122,13 +123,23 @@ export default function RecurringOperationsPage() {
     try {
       if (isEditMode && selectedOperation) {
         await updateOperation(selectedOperation.id, formData);
+        toast.success("Opération récurrente modifiée avec succès", {
+          description: `"${formData.description}" a été mise à jour`,
+        });
       } else {
         await createOperation(formData);
+        toast.success("Opération récurrente créée avec succès", {
+          description: `"${formData.description}" a été configurée`,
+        });
       }
       resetForm();
       setIsDialogOpen(false);
-    } catch (err) {
+      fetchOperations(); // Recharger la liste
+    } catch (err: any) {
       console.error("Erreur:", err);
+      toast.error("Erreur lors de l'enregistrement", {
+        description: err.message || "Une erreur est survenue",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -148,12 +159,82 @@ export default function RecurringOperationsPage() {
     setSelectedOperation(null);
   };
 
-  const handleExecuteOperation = async (id: number) => {
+  const handleExecuteOperation = async (id: number, description: string) => {
     try {
       await executeOperation(id);
-      fetchOperations();
-    } catch (err) {
+      toast.success("Opération exécutée avec succès", {
+        description: `"${description}" a été traitée`,
+      });
+      fetchOperations(); // Recharger la liste
+    } catch (err: any) {
       console.error("Erreur lors de l'exécution:", err);
+      toast.error("Erreur lors de l'exécution", {
+        description: err.message || "Impossible d'exécuter l'opération",
+      });
+    }
+  };
+
+  const handleDeleteOperation = async (id: number, description: string) => {
+    // Confirmation personnalisée avec toast
+    toast.custom(
+      (t) => (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-80">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <Bell className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900">
+                Confirmer la suppression
+              </h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Êtes-vous sûr de vouloir supprimer l'opération "{description}" ?
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toast.dismiss(t)}
+                  className="flex-1"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    toast.dismiss(t);
+                    try {
+                      await deleteOperation(id);
+                      toast.success("Opération supprimée", {
+                        description: `"${description}" a été supprimée`,
+                      });
+                      fetchOperations(); // Recharger la liste
+                    } catch (error: any) {
+                      toast.error("Erreur", {
+                        description: "Impossible de supprimer l'opération",
+                      });
+                    }
+                  }}
+                  className="flex-1"
+                >
+                  Supprimer
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      {
+        duration: 10000,
+      }
+    );
+  };
+
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      resetForm();
     }
   };
 
@@ -176,9 +257,12 @@ export default function RecurringOperationsPage() {
           </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
-            <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white">
+            <Button
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={resetForm}
+            >
               <Plus className="h-4 w-4" />
               Nouvelle Opération
             </Button>
@@ -345,7 +429,12 @@ export default function RecurringOperationsPage() {
               </div>
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={resetForm}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleDialogOpenChange(false)}
+                  disabled={submitting}
+                >
                   Annuler
                 </Button>
                 <Button
@@ -402,8 +491,13 @@ export default function RecurringOperationsPage() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => handleExecuteOperation(operation.id)}
-                    className="flex items-center gap-2"
+                    onClick={() =>
+                      handleExecuteOperation(
+                        operation.id,
+                        operation.description
+                      )
+                    }
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
                   >
                     <Play className="h-4 w-4" />
                     Exécuter
@@ -477,8 +571,13 @@ export default function RecurringOperationsPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleExecuteOperation(operation.id)}
-                      className="flex items-center gap-2"
+                      onClick={() =>
+                        handleExecuteOperation(
+                          operation.id,
+                          operation.description
+                        )
+                      }
+                      className="flex items-center gap-2 text-green-600 border-green-200 hover:bg-green-50"
                     >
                       <Play className="h-4 w-4" />
                       Exécuter
@@ -512,7 +611,12 @@ export default function RecurringOperationsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => deleteOperation(operation.id)}
+                          onClick={() =>
+                            handleDeleteOperation(
+                              operation.id,
+                              operation.description
+                            )
+                          }
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Supprimer

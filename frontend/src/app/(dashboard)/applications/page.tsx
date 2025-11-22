@@ -57,6 +57,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/constants";
+import { toast } from "sonner";
+
+const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>(
+  {}
+);
+const [resetPasswordErrors, setResetPasswordErrors] = useState<
+  Record<string, string>
+>({});
 
 // Fonctions utilitaires pour les statuts
 const getStatusIcon = (status: ApplicationStatus) => {
@@ -101,7 +109,6 @@ const getLicenseTypeColor = (licenseType: LicenseType) => {
       return "bg-gray-100 text-gray-800 border-gray-200";
   }
 };
-
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "Non défini";
@@ -181,13 +188,27 @@ export default function ApplicationPage() {
     try {
       if (isEditMode && selectedApplication) {
         await updateApplication(selectedApplication.id, formData);
+        toast.success("Application modifiée avec succès", {
+          description: `"${formData.name}" a été mise à jour`,
+          icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+        });
       } else {
         await createApplication(formData);
+        toast.success("Application créée avec succès", {
+          description: `"${formData.name}" a été ajoutée à vos applications`,
+          icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+        });
       }
       resetForm();
       setIsPopoverOpen(false);
-    } catch (err) {
+      // Recharger les applications après modification
+      fetchApplications();
+    } catch (err: any) {
       console.error("Erreur lors de l'opération :", err);
+      toast.error("Erreur lors de l'opération", {
+        description: err.message || "Une erreur est survenue",
+        icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -227,14 +248,85 @@ export default function ApplicationPage() {
       clearError();
       try {
         await deleteApplication(applicationToDelete.id);
+        toast.success("Application supprimée avec succès", {
+          description: `"${applicationToDelete.name}" a été supprimée`,
+          icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+        });
         setIsDeleteModalOpen(false);
         setApplicationToDelete(null);
-      } catch (err) {
+        // Recharger les applications après suppression
+        fetchApplications();
+      } catch (err: any) {
         console.error("Erreur lors de la suppression :", err);
+        toast.error("Erreur lors de la suppression", {
+          description: err.message || "Impossible de supprimer l'application",
+          icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
+        });
       } finally {
         setDeleting(false);
       }
     }
+  };
+
+  // 🔥 SUPPRESSION DIRECTE AVEC CONFIRMATION STYLÉE
+  const handleQuickDelete = (application: any) => {
+    toast.custom(
+      (t) => (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-80">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900">
+                Confirmer la suppression
+              </h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Êtes-vous sûr de vouloir supprimer l'application "
+                {application.name}" ?
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toast.dismiss(t)}
+                  className="flex-1"
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    toast.dismiss(t);
+                    try {
+                      await deleteApplication(application.id);
+                      toast.success("Application supprimée", {
+                        description: `"${application.name}" a été supprimée`,
+                        icon: (
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                        ),
+                      });
+                      fetchApplications();
+                    } catch (error: any) {
+                      toast.error("Erreur", {
+                        description: "Impossible de supprimer l'application",
+                      });
+                    }
+                  }}
+                  className="flex-1"
+                >
+                  Supprimer
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+      {
+        duration: 10000,
+      }
+    );
   };
 
   const resetForm = () => {
@@ -278,6 +370,16 @@ export default function ApplicationPage() {
     fetchApplications();
   }, [fetchApplications]);
 
+  // 🔥 TOAST DE BIENVENUE AU CHARGEMENT
+  useEffect(() => {
+    if (!loading && applications.length > 0) {
+      toast.success(`Chargement réussi`, {
+        description: `${applications.length} application(s) chargée(s)`,
+        duration: 3000,
+      });
+    }
+  }, [loading, applications.length]);
+
   const StatCard = ({
     title,
     value,
@@ -316,13 +418,6 @@ export default function ApplicationPage() {
       {/* Overlay blur lorsque le popover est ouvert */}
       {isPopoverOpen && (
         <div className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40" />
-      )}
-
-      {/* Affichage des erreurs globales */}
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-          {error}
-        </div>
       )}
 
       {/* === HEADER === */}
@@ -679,8 +774,7 @@ export default function ApplicationPage() {
               <Card
                 key={application.id}
                 className={`group hover:shadow-lg transition-all duration-300 border hover:border-blue-200 cursor-pointer ${
-                  editingApplicationId === application.id ||
-                  (applicationToDelete?.id === application.id && deleting)
+                  editingApplicationId === application.id
                     ? "opacity-50 pointer-events-none"
                     : ""
                 }`}
@@ -697,10 +791,6 @@ export default function ApplicationPage() {
                           {editingApplicationId === application.id && (
                             <Loader2 className="h-3 w-3 text-blue-600 animate-spin" />
                           )}
-                          {applicationToDelete?.id === application.id &&
-                            deleting && (
-                              <Loader2 className="h-3 w-3 text-red-600 animate-spin" />
-                            )}
                         </CardTitle>
                         <div className="flex gap-2 mt-1">
                           <Badge
@@ -758,9 +848,7 @@ export default function ApplicationPage() {
                       size="sm"
                       className="flex items-center gap-2"
                       onClick={() => handleViewDetails(application)}
-                      disabled={
-                        editingApplicationId === application.id || deleting
-                      }
+                      disabled={editingApplicationId === application.id}
                     >
                       <Eye size={16} />
                       Détails
@@ -772,9 +860,7 @@ export default function ApplicationPage() {
                           variant="ghost"
                           size="icon"
                           className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          disabled={
-                            editingApplicationId === application.id || deleting
-                          }
+                          disabled={editingApplicationId === application.id}
                         >
                           {editingApplicationId === application.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -786,9 +872,7 @@ export default function ApplicationPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={() => handleEdit(application)}
-                          disabled={
-                            editingApplicationId === application.id || deleting
-                          }
+                          disabled={editingApplicationId === application.id}
                         >
                           {editingApplicationId === application.id ? (
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -798,18 +882,11 @@ export default function ApplicationPage() {
                           Modifier
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleDeleteClick(application)}
+                          onClick={() => handleQuickDelete(application)}
                           className="text-red-600 focus:text-red-600"
-                          disabled={
-                            editingApplicationId === application.id || deleting
-                          }
+                          disabled={editingApplicationId === application.id}
                         >
-                          {applicationToDelete?.id === application.id &&
-                          deleting ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4 mr-2" />
-                          )}
+                          <Trash2 className="h-4 w-4 mr-2" />
                           Supprimer
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -847,42 +924,6 @@ export default function ApplicationPage() {
           </Card>
         )}
       </div>
-
-      {/* Modal de confirmation de suppression */}
-      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmer la suppression</DialogTitle>
-            <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer l'application "
-              {applicationToDelete?.name}" ? Cette action est irréversible.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteModalOpen(false)}
-              disabled={deleting}
-            >
-              Annuler
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmDelete}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Suppression...
-                </>
-              ) : (
-                "Supprimer"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Modal de détails */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>

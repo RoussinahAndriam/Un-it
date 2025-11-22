@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "../globals.css";
 import Sidebar from "@/components/Sidebar";
 import { AuthProvider } from "@/context/AuthContext";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,6 +32,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50/50`}
       >
+        <Toaster
+          position="top-right"
+          expand={false}
+          richColors
+          closeButton
+          duration={3000}
+        />
         <AuthProvider>
           <div className="flex min-h-screen">
             <aside className="flex-shrink-0">
