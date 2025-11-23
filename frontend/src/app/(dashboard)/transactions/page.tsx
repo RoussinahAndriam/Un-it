@@ -86,6 +86,7 @@ export default function TransactionsPage() {
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   
+  // États pour la recherche et les filtres
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");

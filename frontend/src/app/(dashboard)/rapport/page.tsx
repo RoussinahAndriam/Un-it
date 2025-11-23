@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,11 +39,13 @@ import {
   TrendingUp,
   TrendingDown,
   Wallet,
+  AlertCircle,
+  Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 
 // =====================================
-// 🔥 TYPES MIS À JOUR
+// 🔥 TYPES
 // =====================================
 interface ChartItem {
   mois: number;
@@ -62,7 +63,6 @@ interface StatsResponse {
 }
 
 interface FinancialSummaryResponse {
-  success: boolean;
   data: {
     period: {
       start: string;
@@ -80,7 +80,6 @@ interface FinancialSummaryResponse {
 }
 
 interface AssetSummaryResponse {
-  success: boolean;
   data: {
     assets_by_status: Array<{
       status: string;
@@ -92,9 +91,11 @@ interface AssetSummaryResponse {
   };
 }
 
-interface ExpenseCategory {
+interface Account {
+  id: number;
   name: string;
-  total: number;
+  balance: number;
+  account_type: string;
 }
 
 interface PieDataItem {
@@ -111,6 +112,26 @@ const COLORS = [
   "#FF8042",
   "#8884D8",
   "#82CA9D",
+  "#FF6B6B",
+  "#4ECDC4",
+  "#45B7D1",
+  "#96CEB4",
+];
+
+// 🔥 LISTE DES MOIS
+const MONTHS = [
+  { value: "1", label: "Janvier" },
+  { value: "2", label: "Février" },
+  { value: "3", label: "Mars" },
+  { value: "4", label: "Avril" },
+  { value: "5", label: "Mai" },
+  { value: "6", label: "Juin" },
+  { value: "7", label: "Juillet" },
+  { value: "8", label: "Août" },
+  { value: "9", label: "Septembre" },
+  { value: "10", label: "Octobre" },
+  { value: "11", label: "Novembre" },
+  { value: "12", label: "Décembre" },
 ];
 
 export default function RapportPage() {
@@ -121,46 +142,61 @@ export default function RapportPage() {
   const [assetData, setAssetData] = useState<
     AssetSummaryResponse["data"] | null
   >(null);
-  const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [accounts, setAccounts] = useState<Account[]>([]);
+
+  // 🔥 ÉTAT POUR LE MOIS SÉLECTIONNÉ (mois actuel par défaut)
+  const [selectedMonth, setSelectedMonth] = useState<string>(
+    (new Date().getMonth() + 1).toString()
+  );
+  const [selectedYear, setSelectedYear] = useState(
+    new Date().getFullYear().toString()
+  );
   const [loading, setLoading] = useState({
     monthly: false,
     financial: false,
     assets: false,
+    accounts: false,
   });
 
-  const fetchMonthlyStats = async () => {
-    setLoading((prev) => ({ ...prev, monthly: true }));
+  // 🔥 FONCTION POUR RÉCUPÉRER LES COMPTES
+  const fetchAccounts = async () => {
+    setLoading((prev) => ({ ...prev, accounts: true }));
     try {
-      const res = await api.get<StatsResponse>(
-        `/reports/monthly-stats?year=${year}`
-      );
-
-      if (res.data.success) {
-        setData(res.data.data);
-        toast.success("Statistiques mensuelles mises à jour");
+      const res = await api.get<{ data: Account[] }>("/accounts");
+      setAccounts(res.data.data);
+    } catch (err: any) {
+      console.error("Erreur lors du chargement des comptes :", err);
+      if (err.response?.status !== 404) {
+        toast.error("Erreur lors du chargement des comptes");
       }
-    } catch (err) {
-      console.error("Erreur lors du chargement des statistiques :", err);
-      toast.error("Erreur lors du chargement des statistiques mensuelles");
     } finally {
-      setLoading((prev) => ({ ...prev, monthly: false }));
+      setLoading((prev) => ({ ...prev, accounts: false }));
     }
   };
 
+  // 🔥 FONCTION POUR RÉCUPÉRER LE RÉSUMÉ FINANCIER POUR UN MOIS
   const fetchFinancialSummary = async () => {
     setLoading((prev) => ({ ...prev, financial: true }));
     try {
-      const startDate = `${year}-01-01`;
-      const endDate = `${year}-12-31`;
+      const month = parseInt(selectedMonth);
+      const year = parseInt(selectedYear);
+
+      // Calculer les dates de début et fin du mois
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0); // Dernier jour du mois
+
+      const startDateStr = startDate.toISOString().split("T")[0];
+      const endDateStr = endDate.toISOString().split("T")[0];
 
       const res = await api.get<FinancialSummaryResponse>(
-        `/reports/financial-summary?start_date=${startDate}&end_date=${endDate}`
+        `/reports/financial-summary?start_date=${startDateStr}&end_date=${endDateStr}`
       );
 
-      if (res.data.success) {
-        setFinancialData(res.data.data);
-      }
-    } catch (err) {
+      setFinancialData(res.data.data);
+      toast.success(
+        `Données mises à jour pour ${MONTHS[month - 1]?.label} ${year}`
+      );
+    } catch (err: any) {
       console.error("Erreur lors du chargement du résumé financier :", err);
       toast.error("Erreur lors du chargement du résumé financier");
     } finally {
@@ -168,15 +204,31 @@ export default function RapportPage() {
     }
   };
 
+  // 🔥 FONCTION POUR RÉCUPÉRER LES STATS MENSUELLES (pour l'année complète)
+  const fetchMonthlyStats = async () => {
+    setLoading((prev) => ({ ...prev, monthly: true }));
+    try {
+      const res = await api.get<StatsResponse>(
+        `/reports/monthly-stats?year=${selectedYear}`
+      );
+
+      if (res.data.success) {
+        setData(res.data.data);
+      }
+    } catch (err: any) {
+      console.error("Erreur lors du chargement des statistiques :", err);
+      toast.error("Erreur lors du chargement des statistiques mensuelles");
+    } finally {
+      setLoading((prev) => ({ ...prev, monthly: false }));
+    }
+  };
+
   const fetchAssetSummary = async () => {
     setLoading((prev) => ({ ...prev, assets: true }));
     try {
       const res = await api.get<AssetSummaryResponse>("/reports/asset-summary");
-
-      if (res.data.success) {
-        setAssetData(res.data.data);
-      }
-    } catch (err) {
+      setAssetData(res.data.data);
+    } catch (err: any) {
       console.error("Erreur lors du chargement du rapport des actifs :", err);
       toast.error("Erreur lors du chargement du rapport des actifs");
     } finally {
@@ -188,7 +240,8 @@ export default function RapportPage() {
     fetchMonthlyStats();
     fetchFinancialSummary();
     fetchAssetSummary();
-  }, [year]);
+    fetchAccounts();
+  }, [selectedMonth, selectedYear]); // 🔥 DÉCLENCHEMENT QUAND LE MOIS OU L'ANNÉE CHANGE
 
   const moisLabels = [
     "Jan",
@@ -205,7 +258,7 @@ export default function RapportPage() {
     "Déc",
   ];
 
-  // Préparer les données pour les graphiques
+  // Préparer les données pour les graphiques annuels
   const chartData = data
     ? moisLabels.map((mois, index) => ({
         mois,
@@ -217,21 +270,24 @@ export default function RapportPage() {
       }))
     : [];
 
-  const totalRevenu = data
-    ? data.revenus.reduce((acc, r) => acc + r.total, 0)
-    : 0;
-  const totalDepense = data
-    ? data.depenses.reduce((acc, d) => acc + d.total, 0)
-    : 0;
-  const profit = totalRevenu - totalDepense;
+  // 🔥 UTILISER LES DONNÉES DU MOIS SÉLECTIONNÉ
+  const totalRevenu = financialData?.total_revenues || 0;
+  const totalDepense = financialData?.total_expenses || 0;
+  const profit = financialData?.net_profit || totalRevenu - totalDepense;
+
+  // 🔥 CALCUL DU SOLDE TOTAL
+  const totalBalance =
+    financialData?.current_total_balance ||
+    accounts.reduce((sum, account) => sum + account.balance, 0);
 
   // Préparer les données pour le graphique des dépenses par catégorie
   const prepareExpenseChartData = (
-    expenses: ExpenseCategory[]
+    expenses: Array<{ name: string; total: number }>
   ): PieDataItem[] => {
     const total = expenses.reduce((sum, item) => sum + item.total, 0);
     return expenses.map((item) => ({
-      name: item.name,
+      name:
+        item.name.length > 20 ? item.name.substring(0, 20) + "..." : item.name,
       value: item.total,
       percent: total > 0 ? (item.total / total) * 100 : 0,
     }));
@@ -244,7 +300,7 @@ export default function RapportPage() {
   // Données pour le graphique des actifs par statut
   const assetStatusData = assetData?.assets_by_status || [];
 
-  // Calculer le pourcentage de croissance (éviter les divisions par zéro)
+  // Calculer le pourcentage de croissance
   const calculateGrowthPercentage = (
     current: number,
     previous: number
@@ -259,8 +315,19 @@ export default function RapportPage() {
   const downloadFile = async (url: string, filename: string) => {
     try {
       const res = await api.get(url, {
-        responseType: "blob", // IMPORTANT
+        responseType: "blob",
+        params: {
+          year: selectedYear,
+          month: selectedMonth,
+        },
       });
+
+      // Vérifier si c'est un JSON (erreur) ou un vrai fichier
+      if (res.headers["content-type"]?.includes("application/json")) {
+        const errorData = JSON.parse(await res.data.text());
+        toast.error(errorData.message || "Erreur lors de l'export");
+        return;
+      }
 
       const blobUrl = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
@@ -270,25 +337,44 @@ export default function RapportPage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(blobUrl);
-
       toast.success(`Fichier ${filename} téléchargé avec succès`);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur téléchargement :", err);
-      toast.error("Erreur lors du téléchargement");
+
+      // Si c'est une erreur 500 avec des données JSON
+      if (err.response?.data instanceof Blob) {
+        try {
+          const errorText = await err.response.data.text();
+          const errorData = JSON.parse(errorText);
+          toast.error(errorData.message || "Erreur lors du téléchargement");
+        } catch {
+          toast.error("Erreur lors du téléchargement");
+        }
+      } else {
+        toast.error("Erreur lors du téléchargement");
+      }
     }
   };
 
-  const exportExcel = () =>
+  const exportExcel = () => {
+    const monthName =
+      MONTHS.find((m) => m.value === selectedMonth)?.label || selectedMonth;
     downloadFile(
-      `/reports/export/excel?year=${year}`,
-      `rapport_financier_${year}.xlsx`
+      `/reports/export/excel`,
+      `rapport_${monthName}_${selectedYear}.xlsx`
     );
+  };
 
-  const exportPdf = () =>
+ 
+
+  const exportPdf = () => {
+    const monthName =
+      MONTHS.find((m) => m.value === selectedMonth)?.label || selectedMonth;
     downloadFile(
-      `/reports/export/pdf?year=${year}`,
-      `rapport_financier_${year}.pdf`
+      `/reports/export/pdf?year=${selectedYear}&month=${selectedMonth}`,
+      `rapport_${monthName}_${selectedYear}.pdf`
     );
+  };
 
   const exportBoth = () => {
     exportExcel();
@@ -299,10 +385,12 @@ export default function RapportPage() {
     fetchMonthlyStats();
     fetchFinancialSummary();
     fetchAssetSummary();
+    fetchAccounts();
     toast.info("Mise à jour des données en cours...");
   };
 
-  const isLoading = loading.monthly || loading.financial || loading.assets;
+  const isLoading =
+    loading.monthly || loading.financial || loading.assets || loading.accounts;
 
   // Fonction de rendu pour le label du pie chart
   const renderCustomizedLabel = ({
@@ -342,6 +430,50 @@ export default function RapportPage() {
     );
   };
 
+  // 🔥 COMPOSANT POUR LES DÉTAILS DES COMPTES
+  const AccountBalancesList = () => (
+    <div className="mt-4 space-y-3">
+      <h4 className="font-semibold text-gray-900 mb-2">Détails par compte</h4>
+      {accounts.length > 0 ? (
+        accounts.map((account) => (
+          <div
+            key={account.id}
+            className="flex justify-between items-center py-2 border-b"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-sm">{account.name}</span>
+              <Badge variant="outline" className="text-xs">
+                {account.account_type}
+              </Badge>
+            </div>
+            <Badge
+              variant={account.balance >= 0 ? "default" : "destructive"}
+              className={
+                account.balance >= 0
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }
+            >
+              {account.balance.toLocaleString()} FCFA
+            </Badge>
+          </div>
+        ))
+      ) : (
+        <div className="text-center py-4 text-gray-500">
+          <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+          <p>Aucun compte trouvé</p>
+          <p className="text-sm mt-1">
+            Créez des comptes dans la section Comptes
+          </p>
+        </div>
+      )}
+    </div>
+  );
+
+  // 🔥 NOM DU MOIS SÉLECTIONNÉ
+  const selectedMonthName =
+    MONTHS.find((m) => m.value === selectedMonth)?.label || "Mois inconnu";
+
   return (
     <div className="min-h-screen bg-gray-50/30 p-6 space-y-6">
       {/* HEADER */}
@@ -351,23 +483,29 @@ export default function RapportPage() {
             Tableau de Bord Financier
           </h1>
           <p className="text-gray-600 mt-1">
-            Analyse complète de vos finances et actifs
+            Analyse de vos finances pour {selectedMonthName} {selectedYear}
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-          <Select value={year} onValueChange={setYear}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Année" />
-            </SelectTrigger>
-            <SelectContent>
-              {[2025, 2024, 2023, 2022].map((y) => (
-                <SelectItem key={y} value={y.toString()}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* 🔥 FILTRE MOIS */}
+          <div className="flex gap-2">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-40">
+                <Calendar className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Mois" />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+           
+          </div>
 
           <Button
             onClick={refreshAll}
@@ -425,7 +563,7 @@ export default function RapportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Total Revenus
+                  Revenus {selectedMonthName}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
                   {totalRevenu.toLocaleString()} FCFA
@@ -439,12 +577,7 @@ export default function RapportPage() {
               variant="secondary"
               className="mt-2 bg-blue-50 text-blue-700"
             >
-              {totalRevenu > 0 ? "+" : ""}
-              {calculateGrowthPercentage(
-                totalRevenu,
-                totalRevenu * 0.9
-              ).toFixed(1)}
-              % vs prévision
+              {selectedMonthName} {selectedYear}
             </Badge>
           </CardContent>
         </Card>
@@ -454,7 +587,7 @@ export default function RapportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Total Dépenses
+                  Dépenses {selectedMonthName}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
                   {totalDepense.toLocaleString()} FCFA
@@ -478,7 +611,7 @@ export default function RapportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Bénéfice Net
+                  Bénéfice {selectedMonthName}
                 </p>
                 <p
                   className={`text-2xl font-bold mt-2 ${
@@ -514,14 +647,14 @@ export default function RapportPage() {
           </CardContent>
         </Card>
 
+        {/* 🔥 CARTE SOLDE TOTAL */}
         <Card className="border-l-4 border-l-purple-500">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Solde Total</p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
-                  {financialData?.current_total_balance?.toLocaleString() || 0}{" "}
-                  FCFA
+                  {totalBalance.toLocaleString()} FCFA
                 </p>
               </div>
               <div className="p-2 bg-purple-100 rounded-full">
@@ -532,20 +665,21 @@ export default function RapportPage() {
               variant="secondary"
               className="mt-2 bg-purple-50 text-purple-700"
             >
-              Tous comptes
+              {accounts.length} compte(s)
             </Badge>
+            <AccountBalancesList />
           </CardContent>
         </Card>
       </div>
 
       {/* GRAPHIQUES PRINCIPAUX */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* GRAPHIQUE REVENUS/DEPENSES */}
+        {/* GRAPHIQUE ANNUEL REVENUS/DEPENSES */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
-              Évolution Mensuelle ({year})
+              Évolution Annuelle ({selectedYear})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -586,54 +720,81 @@ export default function RapportPage() {
           </CardContent>
         </Card>
 
-        {/* GRAPHIQUE DEPENSES PAR CATEGORIE */}
+        {/* 🔥 GRAPHIQUE DEPENSES PAR CATEGORIE POUR LE MOIS */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingDown className="w-5 h-5 text-red-600" />
-              Dépenses par Catégorie
+              Dépenses par Catégorie ({selectedMonthName})
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading.financial ? (
               <Skeleton className="h-80 w-full" />
             ) : expenseChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={400}>
-                <PieChart>
-                  <Pie
-                    data={expenseChartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={renderCustomizedLabel}
-                    outerRadius={120}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {expenseChartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number, name: string, props: any) => [
-                      `${Number(value).toLocaleString()} FCFA`,
-                      props.payload.name,
-                    ]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="space-y-4">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={expenseChartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={renderCustomizedLabel}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {expenseChartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string, props: any) => [
+                        `${Number(value).toLocaleString()} FCFA`,
+                        props.payload.name,
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* LÉGENDE DÉTAILLÉE */}
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {financialData?.expenses_by_category?.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex justify-between items-center text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{
+                            backgroundColor: COLORS[index % COLORS.length],
+                          }}
+                        />
+                        <span className="truncate">{item.name}</span>
+                      </div>
+                      <span className="font-medium">
+                        {item.total.toLocaleString()} FCFA
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
-              <div className="h-80 flex items-center justify-center text-gray-500">
-                Aucune donnée de dépenses disponible
+              <div className="h-80 flex flex-col items-center justify-center text-gray-500">
+                <AlertCircle className="h-12 w-12 mb-4" />
+                <p>Aucune dépense pour {selectedMonthName}</p>
+                <p className="text-sm mt-2">Aucune transaction ce mois-ci</p>
               </div>
             )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Le reste du code reste inchangé... */}
       {/* STATISTIQUES DES ACTIFS ET DETAILS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* STATUT DES ACTIFS */}
@@ -689,7 +850,9 @@ export default function RapportPage() {
         {/* DETAILS FINANCIERS */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Détails Financiers</CardTitle>
+            <CardTitle>
+              Détails Financiers - {selectedMonthName} {selectedYear}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {financialData ? (
@@ -704,7 +867,7 @@ export default function RapportPage() {
                         Du{" "}
                         {new Date(
                           financialData.period.start
-                        ).toLocaleDateString()}
+                        ).toLocaleDateString()}{" "}
                         au{" "}
                         {new Date(
                           financialData.period.end
@@ -739,6 +902,15 @@ export default function RapportPage() {
                             %
                           </Badge>
                         </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Solde total comptes:</span>
+                          <Badge
+                            variant="default"
+                            className="bg-purple-100 text-purple-800"
+                          >
+                            {totalBalance.toLocaleString()} FCFA
+                          </Badge>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -748,22 +920,25 @@ export default function RapportPage() {
                       Détails des Dépenses
                     </h4>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {financialData.expenses_by_category?.map(
-                        (category, index) => (
-                          <div
-                            key={index}
-                            className="flex justify-between items-center py-2 border-b"
-                          >
-                            <span className="text-sm">{category.name}</span>
-                            <span className="font-medium">
-                              {category.total.toLocaleString()} FCFA
-                            </span>
-                          </div>
+                      {financialData.expenses_by_category?.length > 0 ? (
+                        financialData.expenses_by_category.map(
+                          (category, index) => (
+                            <div
+                              key={index}
+                              className="flex justify-between items-center py-2 border-b"
+                            >
+                              <span className="text-sm">{category.name}</span>
+                              <span className="font-medium">
+                                {category.total.toLocaleString()} FCFA
+                              </span>
+                            </div>
+                          )
                         )
-                      ) || (
-                        <p className="text-sm text-gray-500 text-center py-4">
-                          Aucune donnée de dépenses disponible
-                        </p>
+                      ) : (
+                        <div className="text-center py-4 text-gray-500">
+                          <AlertCircle className="h-8 w-8 mx-auto mb-2" />
+                          <p>Aucune dépense catégorisée</p>
+                        </div>
                       )}
                     </div>
                   </div>

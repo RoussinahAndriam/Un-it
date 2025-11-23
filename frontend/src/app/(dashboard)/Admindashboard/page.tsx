@@ -48,6 +48,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 const formatDate = (dateString: string): string => {
   return new Date(dateString).toLocaleDateString("fr-FR");
@@ -79,7 +80,6 @@ const getRoleLabel = (role: UserRole): string => {
   }
 };
 
-// Interface pour les statistiques utilisateurs
 interface UserStats {
   total: number;
   admins: number;
@@ -87,34 +87,40 @@ interface UserStats {
   employes: number;
 }
 
-// Interface pour les données de réinitialisation de mot de passe
-interface ResetPasswordData {
-  password: string;
-  password_confirmation: string;
-}
-
 export default function AdminPage() {
-  const { 
-    users, 
-    currentUser, 
-    loading, 
-    error, 
-    fetchUsers, 
-    createUser, 
-    updateUser, 
-    deleteUser, 
-    clearError 
+  const {
+    users,
+    currentUser,
+    loading,
+    error,
+    fetchUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+    clearError,
+    fetchCurrentUser,
   } = useUser();
-  
+
   const router = useRouter();
-  
-  const [activeTab, setActiveTab] = useState<"users" | "security" | "settings">("users");
+
+  const [activeTab, setActiveTab] = useState<"users" | "security" | "settings">(
+    "users"
+  );
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false);
-  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] =
+    useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [authChecked, setAuthChecked] = useState(false);
+
+  const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>(
+    {}
+  );
+  const [resetPasswordErrors, setResetPasswordErrors] = useState<
+    Record<string, string>
+  >({});
 
   const [securitySettings, setSecuritySettings] = useState<SecuritySettings>({
     password_min_length: 8,
@@ -138,7 +144,7 @@ export default function AdminPage() {
     role: "employe",
   });
 
-  const [resetPasswordData, setResetPasswordData] = useState<ResetPasswordData>({
+  const [resetPasswordData, setResetPasswordData] = useState({
     password: "",
     password_confirmation: "",
   });
@@ -147,11 +153,8 @@ export default function AdminPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        await fetchUsers();
-        
-        if (currentUser && currentUser.role !== "admin") {
-          router.push("/unauthorized");
-        }
+        await fetchCurrentUser();
+        setAuthChecked(true);
       } catch (error) {
         console.error("Erreur d'authentification:", error);
         router.push("/login");
@@ -159,18 +162,26 @@ export default function AdminPage() {
     };
 
     checkAuth();
-  }, [currentUser, router, fetchUsers]);
+  }, [router, fetchCurrentUser]);
+
+  // Redirection si l'utilisateur n'est pas admin
+  useEffect(() => {
+    if (authChecked && currentUser && currentUser.role !== "admin") {
+      router.push("/unauthorized");
+    }
+  }, [authChecked, currentUser, router]);
 
   // Charger les données de l'admin
   useEffect(() => {
-    loadAdminData();
-  }, []);
+    if (currentUser?.role === "admin") {
+      loadAdminData();
+      fetchUsers();
+    }
+  }, [currentUser, fetchUsers]);
 
   const loadAdminData = async (): Promise<void> => {
     try {
-      const [settingsRes] = await Promise.all([
-        adminAPI.getSettings()
-      ]);
+      const [settingsRes] = await Promise.all([adminAPI.getSettings()]);
       setAppSettings(settingsRes.data.data);
     } catch (error) {
       console.error("Erreur lors du chargement des données admin:", error);
@@ -181,17 +192,46 @@ export default function AdminPage() {
     e.preventDefault();
     setSubmitting(true);
     clearError();
+    setUserFormErrors({});
+
+    // Validation côté client
+    if (!isEditMode && userFormData.password.length < 8) {
+      setUserFormErrors({
+        password: "Le mot de passe doit contenir au moins 8 caractères",
+      });
+      setSubmitting(false);
+      toast.error("Le mot de passe doit contenir au moins 8 caractères");
+      return;
+    }
 
     try {
       if (isEditMode && selectedUser) {
-        await updateUser(selectedUser.id, userFormData);
+        // Pour l'édition, n'envoyer le mot de passe que s'il est rempli
+        const updateData = { ...userFormData };
+        if (!updateData.password) {
+          delete updateData.password;
+        }
+        await updateUser(selectedUser.id, updateData);
+        toast.success("Utilisateur modifié avec succès");
       } else {
         await createUser(userFormData);
+        toast.success("Utilisateur créé avec succès");
       }
       resetUserForm();
       setIsUserDialogOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur:", err);
+      if (
+        err.message?.includes("password") ||
+        err.message?.includes("confirmation")
+      ) {
+        setUserFormErrors({
+          password: "Erreur de mot de passe. Vérifiez les critères.",
+        });
+        toast.error("Erreur de mot de passe");
+      } else {
+        toast.error("Erreur lors de l'opération");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -200,16 +240,40 @@ export default function AdminPage() {
   const handleResetPassword = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
     if (!selectedUser) return;
-    
+
     setSubmitting(true);
-    
+    setResetPasswordErrors({});
+
+    // Validation côté client
+    if (
+      resetPasswordData.password !== resetPasswordData.password_confirmation
+    ) {
+      setResetPasswordErrors({
+        password_confirmation: "Les mots de passe ne correspondent pas",
+      });
+      setSubmitting(false);
+      toast.error("Les mots de passe ne correspondent pas");
+      return;
+    }
+
+    if (resetPasswordData.password.length < 8) {
+      setResetPasswordErrors({
+        password: "Le mot de passe doit contenir au moins 8 caractères",
+      });
+      setSubmitting(false);
+      toast.error("Le mot de passe doit contenir au moins 8 caractères");
+      return;
+    }
+
     try {
       await adminAPI.resetPassword(selectedUser.id, resetPasswordData.password);
+      toast.success("Mot de passe réinitialisé avec succès");
       setIsResetPasswordDialogOpen(false);
       setResetPasswordData({ password: "", password_confirmation: "" });
       setSelectedUser(null);
     } catch (err) {
       console.error("Erreur:", err);
+      toast.error("Erreur lors de la réinitialisation du mot de passe");
     } finally {
       setSubmitting(false);
     }
@@ -224,6 +288,7 @@ export default function AdminPage() {
     });
     setIsEditMode(false);
     setSelectedUser(null);
+    setUserFormErrors({});
   };
 
   const handleEditUser = (user: User): void => {
@@ -242,8 +307,10 @@ export default function AdminPage() {
     if (confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ?")) {
       try {
         await deleteUser(userId);
+        toast.success("Utilisateur supprimé avec succès");
       } catch (err) {
         console.error("Erreur lors de la suppression:", err);
+        toast.error("Erreur lors de la suppression de l'utilisateur");
       }
     }
   };
@@ -251,18 +318,20 @@ export default function AdminPage() {
   const handleSecuritySettingsUpdate = async (): Promise<void> => {
     try {
       await adminAPI.updatePasswordPolicy(securitySettings);
-      // Message de succès
+      toast.success("Paramètres de sécurité mis à jour");
     } catch (err) {
       console.error("Erreur:", err);
+      toast.error("Erreur lors de la mise à jour des paramètres de sécurité");
     }
   };
 
   const handleAppSettingsUpdate = async (): Promise<void> => {
     try {
       await adminAPI.updateSettings(appSettings);
-      // Message de succès
+      toast.success("Paramètres de l'application mis à jour");
     } catch (err) {
       console.error("Erreur:", err);
+      toast.error("Erreur lors de la mise à jour des paramètres");
     }
   };
 
@@ -290,15 +359,35 @@ export default function AdminPage() {
     );
   }
 
-  if (!currentUser || currentUser.role !== "admin") {
+  if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50/30">
         <Card className="w-96">
           <CardContent className="p-6 text-center">
             <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">Accès Restreint</h2>
+            <h2 className="text-xl font-bold mb-2">Non authentifié</h2>
+            <p className="text-gray-600 mb-4">
+              Vous devez être connecté pour accéder à cette page.
+            </p>
+            <Button onClick={() => router.push("/login")}>Se connecter</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (currentUser.role !== "admin") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50/30">
+        <Card className="w-96">
+          <CardContent className="p-6 text-center">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-bold mb-2">Accès Refusé</h2>
             <p className="text-gray-600 mb-4">
               Vous devez être administrateur pour accéder à cette page.
+            </p>
+            <p className="text-sm text-gray-500 mb-4">
+              Votre rôle: <strong>{getRoleLabel(currentUser.role)}</strong>
             </p>
             <Button onClick={() => router.push("/")}>Retour à l'accueil</Button>
           </CardContent>
@@ -306,6 +395,7 @@ export default function AdminPage() {
       </div>
     );
   }
+
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
@@ -378,14 +468,28 @@ export default function AdminPage() {
                   <Input
                     type="password"
                     value={userFormData.password}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setUserFormData((prev) => ({
                         ...prev,
                         password: e.target.value,
-                      }))
-                    }
+                      }));
+                      if (userFormErrors.password) {
+                        setUserFormErrors({});
+                      }
+                    }}
                     required={!isEditMode}
+                    className={userFormErrors.password ? "border-red-500" : ""}
                   />
+                  {userFormErrors.password && (
+                    <p className="text-red-500 text-sm mt-1">
+                      {userFormErrors.password}
+                    </p>
+                  )}
+                  {!isEditMode && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Le mot de passe doit contenir au moins 8 caractères
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -432,11 +536,6 @@ export default function AdminPage() {
               </form>
             </DialogContent>
           </Dialog>
-
-          <Button variant="outline" className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Exporter
-          </Button>
         </div>
       </div>
 
@@ -816,14 +915,29 @@ export default function AdminPage() {
               <Input
                 type="password"
                 value={resetPasswordData.password}
-                onChange={(e) =>
+                onChange={(e) => {
                   setResetPasswordData((prev) => ({
                     ...prev,
                     password: e.target.value,
-                  }))
-                }
+                  }));
+                  if (
+                    resetPasswordErrors.password ||
+                    resetPasswordErrors.password_confirmation
+                  ) {
+                    setResetPasswordErrors({});
+                  }
+                }}
                 required
+                className={resetPasswordErrors.password ? "border-red-500" : ""}
               />
+              {resetPasswordErrors.password && (
+                <p className="text-red-500 text-sm mt-1">
+                  {resetPasswordErrors.password}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                Le mot de passe doit contenir au moins 8 caractères
+              </p>
             </div>
 
             <div>
@@ -831,14 +945,27 @@ export default function AdminPage() {
               <Input
                 type="password"
                 value={resetPasswordData.password_confirmation}
-                onChange={(e) =>
+                onChange={(e) => {
                   setResetPasswordData((prev) => ({
                     ...prev,
                     password_confirmation: e.target.value,
-                  }))
-                }
+                  }));
+                  if (resetPasswordErrors.password_confirmation) {
+                    setResetPasswordErrors({});
+                  }
+                }}
                 required
+                className={
+                  resetPasswordErrors.password_confirmation
+                    ? "border-red-500"
+                    : ""
+                }
               />
+              {resetPasswordErrors.password_confirmation && (
+                <p className="text-red-500 text-sm mt-1">
+                  {resetPasswordErrors.password_confirmation}
+                </p>
+              )}
             </div>
 
             <DialogFooter>

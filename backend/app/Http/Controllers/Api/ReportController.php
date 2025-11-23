@@ -183,11 +183,59 @@ class ReportController extends Controller
     /**
      * Export Excel des statistiques
      */
+    /**
+     * Export Excel des statistiques
+     */
     public function exportExcel(Request $request)
     {
         try {
             $year = $request->get('year', date('Y'));
+            $month = $request->get('month', date('m'));
             
+            // Récupération des données pour le mois/année
+            $startDate = Carbon::create($year, $month, 1)->startOfMonth();
+            $endDate = Carbon::create($year, $month, 1)->endOfMonth();
+            
+            // Transactions du mois
+            $transactions = Transaction::with(['account', 'category'])
+                ->whereBetween('transaction_date', [$startDate, $endDate])
+                ->orderBy('transaction_date', 'asc')
+                ->get();
+
+            // Calcul des totaux
+            $totalIncome = $transactions->where('type', 'revenu')->sum('amount');
+            $totalExpense = $transactions->where('type', 'depense')->sum('amount');
+            $netAmount = $totalIncome - $totalExpense;
+
+            // Récupération des comptes
+            $accounts = Account::all();
+
+            // Préparer les données pour Excel
+            $data = [
+                'period' => [
+                    'month' => $month,
+                    'year' => $year,
+                    'start_date' => $startDate->format('d/m/Y'),
+                    'end_date' => $endDate->format('d/m/Y'),
+                ],
+                'summary' => [
+                    'total_income' => $totalIncome,
+                    'total_expense' => $totalExpense,
+                    'net_amount' => $netAmount,
+                    'total_transactions' => $transactions->count(),
+                ],
+                'transactions' => $transactions,
+                'accounts' => $accounts,
+            ];
+
+            // Pour l'instant, retourner un JSON en attendant l'implémentation Excel
+            // Vous devrez installer maatwebsite/excel pour une vraie exportation Excel
+            return response()->json([
+                'success' => true,
+                'message' => 'Export Excel préparé avec succès',
+                'data' => $data
+            ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

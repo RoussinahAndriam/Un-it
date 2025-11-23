@@ -100,25 +100,32 @@ export const useUser = (): UseUserReturn => {
     }
   }, [clearError]);
 
-  const createUser = useCallback(
-    async (data: CreateUserData): Promise<User> => {
-      try {
-        setLoading(true);
-        clearError();
+ const createUser = useCallback(
+   async (data: CreateUserData): Promise<User> => {
+     try {
+       setLoading(true);
+       clearError();
 
-        const response = await api.post("/users", data);
-        const newUser = response.data.data || response.data; // Support both formats
+       // Inclure la confirmation du mot de passe pour l'API Laravel
+       const userData = {
+         ...data,
+         password_confirmation: data.password, // Laravel attend ce champ
+       };
 
-        setUsers((prev) => [...prev, newUser]);
-        return newUser;
-      } catch (error: any) {
-        throw handleError(error, "Erreur lors de la création de l'utilisateur");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [clearError]
-  );
+       const response = await api.post("/users", userData);
+       const newUser = response.data.data || response.data;
+
+       setUsers((prev) => [...prev, newUser]);
+       return newUser;
+     } catch (error: any) {
+       throw handleError(error, "Erreur lors de la création de l'utilisateur");
+     } finally {
+       setLoading(false);
+     }
+   },
+   [clearError]
+ );
+
 
   const updateUser = useCallback(
     async (id: number, data: UpdateUserData): Promise<User> => {
