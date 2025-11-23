@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent, ChangeEvent } from "react";
+import { useState, useEffect, FormEvent, ChangeEvent, useMemo } from "react";
 import { useAccount, AccountType, CreateAccountData, Account } from "@/hooks/useAccount";
 import {
   Popover,
@@ -34,6 +34,8 @@ import {
   Landmark,
   Coins,
   SmartphoneNfc,
+  Search,
+  Filter,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -83,7 +85,6 @@ const getAccountTypeColor = (type: AccountType) => {
   }
 };
 
-
 export default function AccountPage() {
   const {
     accounts,
@@ -106,6 +107,12 @@ export default function AccountPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
+
+  // États pour la recherche et les filtres
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<AccountType | "all">("all");
+  const [sortBy, setSortBy] = useState<"name" | "balance" | "type">("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   const [formData, setFormData] = useState<CreateAccountData>({
     name: "",
@@ -202,10 +209,76 @@ export default function AccountPage() {
     clearError();
   };
 
+  // Fonction pour réinitialiser tous les filtres
+  const resetFilters = () => {
+    setSearchQuery("");
+    setTypeFilter("all");
+    setSortBy("name");
+    setSortOrder("asc");
+  };
+
+  // Filtrage et tri des comptes
+  const filteredAndSortedAccounts = useMemo(() => {
+    let filtered = accounts.filter((account) => {
+      const matchesSearch = account.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === "all" || account.type === typeFilter;
+      return matchesSearch && matchesType;
+    });
+
+    // Tri des comptes
+    filtered.sort((a, b) => {
+      let aValue: string | number;
+      let bValue: string | number;
+
+      switch (sortBy) {
+        case "name":
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case "balance":
+          aValue = a.balance;
+          bValue = b.balance;
+          break;
+        case "type":
+          aValue = a.type;
+          bValue = b.type;
+          break;
+        default:
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+      }
+
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortOrder === "asc" 
+          ? aValue.localeCompare(bValue)
+          : bValue.localeCompare(aValue);
+      } else {
+        return sortOrder === "asc" 
+          ? (aValue as number) - (bValue as number)
+          : (bValue as number) - (aValue as number);
+      }
+    });
+
+    return filtered;
+  }, [accounts, searchQuery, typeFilter, sortBy, sortOrder]);
+
   // Calcul des statistiques
   const totalBalance = getTotalBalance();
   const activeAccounts = accounts.length;
   const accountTypes = new Set(accounts.map((acc) => acc.type)).size;
+
+  // Statistiques filtrées
+const filteredTotalBalance = useMemo(() => {
+  return filteredAndSortedAccounts.reduce((sum, account) => {
+    const raw = String(account.balance ?? "0").replace(/[^\d.-]/g, "");
+    const balance = Number(raw);
+
+    return sum + (isNaN(balance) ? 0 : balance);
+  }, 0);
+}, [filteredAndSortedAccounts]);
+
+
+  const filteredAccountCount = filteredAndSortedAccounts.length;
 
   // Charger les comptes au montage
   useEffect(() => {
@@ -229,7 +302,7 @@ export default function AccountPage() {
           <div>
             <p className="text-sm font-medium text-gray-600">{title}</p>
             <p className={`text-2xl font-bold ${color} mt-2`}>
-              {typeof value === "number" && title == "Solde Total"
+              {typeof value === "number" && title.includes("Solde")
                 ? formatCurrency(value)
                 : value}
             </p>
@@ -443,12 +516,99 @@ export default function AccountPage() {
         />
       </div>
 
+      {/* === BARRE DE RECHERCHE ET FILTRES === */}
+      <Card className="mb-8">
+        <CardContent className="p-6">
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Barre de recherche */}
+            <div className="relative w-full lg:w-auto">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Rechercher un compte..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 w-full lg:w-80"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+              {/* Filtre par type */}
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-500" />
+                <Select value={typeFilter} onValueChange={(value: AccountType | "all") => setTypeFilter(value)}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Type de compte" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les types</SelectItem>
+                    <SelectItem value="bancaire">Bancaire</SelectItem>
+                    <SelectItem value="mobile_money">Mobile Money</SelectItem>
+                    <SelectItem value="especes">Espèces</SelectItem>
+                    <SelectItem value="autre">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Tri */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 whitespace-nowrap">Trier par:</span>
+                <Select value={sortBy} onValueChange={(value: "name" | "balance" | "type") => setSortBy(value)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Nom</SelectItem>
+                    <SelectItem value="balance">Solde</SelectItem>
+                    <SelectItem value="type">Type</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                  className="h-10 w-10"
+                >
+                  {sortOrder === "asc" ? "A→Z" : "Z→A"}
+                </Button>
+              </div>
+
+              {/* Bouton réinitialiser */}
+              {(searchQuery || typeFilter !== "all" || sortBy !== "name") && (
+                <Button
+                  variant="outline"
+                  onClick={resetFilters}
+                  className="whitespace-nowrap"
+                >
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Résultats du filtrage */}
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-600">
+            <span>
+              {filteredAccountCount} compte{filteredAccountCount > 1 ? "s" : ""} trouvé{filteredAccountCount > 1 ? "s" : ""}
+              {searchQuery && ` pour "${searchQuery}"`}
+              {typeFilter !== "all" && ` • Type: ${typeFilter}`}
+            </span>
+            
+            {filteredAccountCount > 0 && (
+              <span className="text-green-600 font-medium">
+                Solde filtré: {formatCurrency(filteredTotalBalance)}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* === LISTE DES COMPTES === */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">Mes Comptes</h2>
           <span className="text-sm text-gray-500">
-            {accounts.length} compte{accounts.length > 1 ? "s" : ""} au total
+            {filteredAndSortedAccounts.length} compte{filteredAndSortedAccounts.length > 1 ? "s" : ""} affiché{filteredAndSortedAccounts.length > 1 ? "s" : ""}
           </span>
         </div>
 
@@ -474,9 +634,9 @@ export default function AccountPage() {
               </Card>
             ))}
           </div>
-        ) : accounts.length > 0 ? (
+        ) : filteredAndSortedAccounts.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {accounts.map((account) => (
+            {filteredAndSortedAccounts.map((account) => (
               <Card
                 key={account.id}
                 className={`group hover:shadow-lg transition-all duration-300 border hover:border-blue-200 cursor-pointer ${
@@ -604,13 +764,21 @@ export default function AccountPage() {
             <CardContent>
               <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Aucun compte trouvé
+                {accounts.length === 0 ? "Aucun compte trouvé" : "Aucun résultat"}
               </h3>
               <p className="text-gray-500 mb-4">
-                Commencez par créer votre premier compte financier
+                {accounts.length === 0 
+                  ? "Commencez par créer votre premier compte financier"
+                  : "Aucun compte ne correspond à vos critères de recherche"}
               </p>
               <Button
-                onClick={() => setIsPopoverOpen(true)}
+                onClick={() => {
+                  if (accounts.length === 0) {
+                    setIsPopoverOpen(true);
+                  } else {
+                    resetFilters();
+                  }
+                }}
                 className="bg-blue-600 hover:bg-blue-700"
                 disabled={submitting}
               >
@@ -619,7 +787,7 @@ export default function AccountPage() {
                 ) : (
                   <Plus size={18} className="mr-2" />
                 )}
-                Créer un compte
+                {accounts.length === 0 ? "Créer un compte" : "Réinitialiser les filtres"}
               </Button>
             </CardContent>
           </Card>

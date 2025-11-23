@@ -44,7 +44,7 @@ interface UseTransactionReturn {
   error: string | null;
 
   // Actions
-  fetchTransactions: (filters?: TransactionFilters) => Promise<void>;
+  fetchTransactions: () => Promise<void>;
   createTransaction: (data: CreateTransactionData) => Promise<Transaction>;
   updateTransaction: (
     id: number,
@@ -112,22 +112,11 @@ export const useTransaction = (): UseTransactionReturn => {
   };
 
   const fetchTransactions = useCallback(
-    async (filters?: TransactionFilters): Promise<void> => {
+    async (): Promise<void> => {
       try {
         setLoading(true);
         clearError();
-
-        const params = new URLSearchParams();
-        if (filters?.type) params.append("type", filters.type);
-        if (filters?.account_id)
-          params.append("account_id", filters.account_id.toString());
-        if (filters?.category_id)
-          params.append("category_id", filters.category_id.toString());
-        if (filters?.start_date)
-          params.append("start_date", filters.start_date);
-        if (filters?.end_date) params.append("end_date", filters.end_date);
-
-        const response = await api.get(`/transactions?${params.toString()}`);
+        const response = await api.get('/transactions');
         setTransactions(response.data.data);
       } catch (error: any) {
         handleError(error, "Erreur lors du chargement des transactions");

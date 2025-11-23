@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, useMemo } from "react";
 import {
   useTransaction,
   TransactionType,
@@ -31,6 +31,9 @@ import {
   Edit,
   Trash2,
   Search,
+  X,
+  Calendar,
+  Landmark,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -51,7 +54,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/constants";
-
 
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString("fr-FR");
@@ -83,7 +85,21 @@ export default function TransactionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
+  
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [accountFilter, setAccountFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
+    start: "",
+    end: "",
+  });
+  const [amountRange, setAmountRange] = useState<{ min: string; max: string }>({
+    min: "",
+    max: "",
+  });
+  const [sortBy, setSortBy] = useState<"date" | "amount" | "description">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [showFilters, setShowFilters] = useState(false);
 
   const [filters, setFilters] = useState<TransactionFilters>({
     type: "depense",
@@ -99,8 +115,8 @@ export default function TransactionsPage() {
   });
 
   useEffect(() => {
-    fetchTransactions(filters);
-  }, [filters]);
+    fetchTransactions();
+  }, []);
 
   useEffect(() => {
     fetchAccounts();
@@ -144,25 +160,119 @@ export default function TransactionsPage() {
     setSelectedTransaction(null);
   };
 
-  const filteredTransactions = transactions.filter(
-    (transaction) =>
-      transaction.description
-        ?.toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      transaction.category?.name
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      transaction.account?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Réinitialiser tous les filtres
+  const resetFilters = () => {
+    setSearchTerm("");
+    setCategoryFilter("all");
+    setAccountFilter("all");
+    setDateRange({ start: "", end: "" });
+    setAmountRange({ min: "", max: "" });
+    setSortBy("date");
+    setSortOrder("desc");
+  };
+
+  // Filtrer et trier les transactions
+  const filteredAndSortedTransactions = useMemo(() => {
+    let filtered = transactions.filter((transaction) => {
+      // Filtre par type (tab actif)
+      if (transaction.type !== activeTab) return false;
+
+      // Filtre par recherche
+      const matchesSearch = 
+        transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transaction.category?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        transaction.account?.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+      // Filtre par catégorie
+      const matchesCategory = 
+        categoryFilter === "all" || 
+        transaction.transaction_category_id?.toString() === categoryFilter;
+
+      // Filtre par compte
+      const matchesAccount = 
+        accountFilter === "all" || 
+        transaction.account_id.toString() === accountFilter;
+
+      // Filtre par date
+      const transactionDate = new Date(transaction.transaction_date);
+      const matchesDateRange = 
+        (!dateRange.start || transactionDate >= new Date(dateRange.start)) &&
+        (!dateRange.end || transactionDate <= new Date(dateRange.end));
+
+      // Filtre par montant
+      const matchesAmountRange =
+        (!amountRange.min || transaction.amount >= parseFloat(amountRange.min)) &&
+        (!amountRange.max || transaction.amount <= parseFloat(amountRange.max));
+
+      return matchesSearch && matchesCategory && matchesAccount && matchesDateRange && matchesAmountRange;
+    });
+
+    // Trier les transactions
+    filtered.sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortBy) {
+        case "date":
+          aValue = new Date(a.transaction_date);
+          bValue = new Date(b.transaction_date);
+          break;
+        case "amount":
+          aValue = a.amount;
+          bValue = b.amount;
+          break;
+        case "description":
+          aValue = a.description?.toLowerCase() || "";
+          bValue = b.description?.toLowerCase() || "";
+          break;
+        default:
+          aValue = new Date(a.transaction_date);
+          bValue = new Date(b.transaction_date);
+      }
+
+      if (sortOrder === "asc") {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+    return filtered;
+  }, [
+    transactions,
+    activeTab,
+    searchTerm,
+    categoryFilter,
+    accountFilter,
+    dateRange,
+    amountRange,
+    sortBy,
+    sortOrder
+  ]);
+
+  // Statistiques filtrées
+  const filteredStats = useMemo(() => {
+    const filtered = filteredAndSortedTransactions;
+    const totalAmount = filtered.reduce((sum, transaction) => sum + transaction.amount, 0);
+    const averageAmount = filtered.length > 0 ? totalAmount / filtered.length : 0;
+    
+    return {
+      count: filtered.length,
+      totalAmount,
+      averageAmount,
+    };
+  }, [filteredAndSortedTransactions]);
 
   const monthlySummary = getMonthlySummary(
     new Date().getFullYear(),
     new Date().getMonth() + 1
   );
 
-
   const revenueCategories = categories.filter((cat) => cat.type === "revenu");
   const expenseCategories = categories.filter((cat) => cat.type === "depense");
+
+  // Catégories et comptes pour les filtres
+  const currentCategories = activeTab === "revenu" ? revenueCategories : expenseCategories;
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
@@ -320,7 +430,14 @@ export default function TransactionsPage() {
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={resetForm}>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsDialogOpen(false);
+                      resetForm();
+                    }}
+                  >
                     Annuler
                   </Button>
                   <Button
@@ -349,7 +466,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Statistiques rapides */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -415,31 +532,212 @@ export default function TransactionsPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">
+                  Transactions filtrées
+                </p>
+                <p className="text-2xl font-bold text-blue-600 mt-2">
+                  {filteredStats.count}
+                </p>
+                <p className="text-xs text-gray-500">
+                  Total: {formatCurrency(filteredStats.totalAmount)}
+                </p>
+              </div>
+              <div className="p-3 rounded-full bg-blue-100">
+                <Filter className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filtres et recherche */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Rechercher une transaction..."
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+      {/* Barre de recherche et filtres */}
+      <Card className="mb-6">
+        <CardContent className="p-6">
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Barre de recherche */}
+            <div className="relative w-full lg:w-auto">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Rechercher une transaction..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 w-full lg:w-80"
+              />
+            </div>
+
+            <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+              {/* Bouton filtres avancés */}
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="flex items-center gap-2"
+              >
+                <Filter className="h-4 w-4" />
+                Filtres
+                {(categoryFilter !== "all" || accountFilter !== "all" || dateRange.start || dateRange.end || amountRange.min || amountRange.max) && (
+                  <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-800">
+                    !
+                  </Badge>
+                )}
+              </Button>
+
+              {/* Tabs pour revenus/dépenses */}
+              <Tabs
+                value={activeTab}
+                onValueChange={(value) => setActiveTab(value as TransactionType)}
+              >
+                <TabsList>
+                  <TabsTrigger value="depense">Dépenses</TabsTrigger>
+                  <TabsTrigger value="revenu">Revenus</TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Tri */}
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600 whitespace-nowrap">Trier par:</span>
+                <Select value={sortBy} onValueChange={(value: "date" | "amount" | "description") => setSortBy(value)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="amount">Montant</SelectItem>
+                    <SelectItem value="description">Description</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                  className="h-10 w-10"
+                >
+                  {sortOrder === "asc" ? "A→Z" : "Z→A"}
+                </Button>
+              </div>
+
+              {/* Bouton réinitialiser */}
+              {(searchTerm || categoryFilter !== "all" || accountFilter !== "all" || dateRange.start || dateRange.end || amountRange.min || amountRange.max) && (
+                <Button
+                  variant="outline"
+                  onClick={resetFilters}
+                  className="whitespace-nowrap"
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-        <Tabs
-          value={activeTab}
-          onValueChange={(value) => setActiveTab(value as TransactionType)}
-        >
-          <TabsList>
-            <TabsTrigger value="depense">Dépenses</TabsTrigger>
-            <TabsTrigger value="revenu">Revenus</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+
+          {/* Filtres avancés */}
+          {showFilters && (
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg border">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Filtre par catégorie */}
+                <div>
+                  <Label className="text-sm font-medium">Catégorie</Label>
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Toutes les catégories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Toutes les catégories</SelectItem>
+                      {currentCategories.map((category) => (
+                        <SelectItem key={category.id} value={category.id.toString()}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtre par compte */}
+                <div>
+                  <Label className="text-sm font-medium">Compte</Label>
+                  <Select value={accountFilter} onValueChange={setAccountFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tous les comptes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tous les comptes</SelectItem>
+                      {accounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id.toString()}>
+                          {account.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtre par date */}
+                <div>
+                  <Label className="text-sm font-medium">Date de début</Label>
+                  <Input
+                    type="date"
+                    value={dateRange.start}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Date de fin</Label>
+                  <Input
+                    type="date"
+                    value={dateRange.end}
+                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Filtre par montant */}
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-md">
+                <div>
+                  <Label className="text-sm font-medium">Montant minimum</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0"
+                    value={amountRange.min}
+                    onChange={(e) => setAmountRange(prev => ({ ...prev, min: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Montant maximum</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="∞"
+                    value={amountRange.max}
+                    onChange={(e) => setAmountRange(prev => ({ ...prev, max: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Résultats du filtrage */}
+          <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-600">
+            <span>
+              {filteredStats.count} transaction{filteredStats.count > 1 ? "s" : ""} trouvée{filteredStats.count > 1 ? "s" : ""}
+              {searchTerm && ` pour "${searchTerm}"`}
+            </span>
+            
+            {filteredStats.count > 0 && (
+              <span className={`font-medium ${
+                activeTab === "revenu" ? "text-green-600" : "text-red-600"
+              }`}>
+                Total: {formatCurrency(filteredStats.totalAmount)}
+                {filteredStats.count > 1 && ` • Moyenne: ${formatCurrency(filteredStats.averageAmount)}`}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Liste des transactions */}
       <div className="space-y-4">
@@ -449,8 +747,8 @@ export default function TransactionsPage() {
               <Skeleton key={i} className="h-20 w-full" />
             ))}
           </div>
-        ) : filteredTransactions.length > 0 ? (
-          filteredTransactions.map((transaction) => (
+        ) : filteredAndSortedTransactions.length > 0 ? (
+          filteredAndSortedTransactions.map((transaction) => (
             <Card
               key={transaction.id}
               className="hover:shadow-md transition-shadow"
@@ -458,20 +756,36 @@ export default function TransactionsPage() {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-1">
-                    <Badge
-                      className={getTransactionTypeColor(transaction.type)}
-                    >
-                      {transaction.type === "revenu" ? "Revenu" : "Dépense"}
-                    </Badge>
-                    <div className="flex-1">
-                      <p className="font-semibold">
-                        {transaction.description || "Sans description"}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {transaction.category?.name} •{" "}
-                        {transaction.account?.name} •{" "}
-                        {formatDate(transaction.transaction_date)}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <Badge
+                        className={getTransactionTypeColor(transaction.type)}
+                      >
+                        {transaction.type === "revenu" ? "Revenu" : "Dépense"}
+                      </Badge>
+                      <div className="flex-1">
+                        <p className="font-semibold">
+                          {transaction.description || "Sans description"}
+                        </p>
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          {transaction.category && (
+                            <span>{transaction.category.name}</span>
+                          )}
+                          {transaction.account && (
+                            <>
+                              <span>•</span>
+                              <div className="flex items-center gap-1">
+                                <Landmark className="h-3 w-3" />
+                                <span>{transaction.account.name}</span>
+                              </div>
+                            </>
+                          )}
+                          <span>•</span>
+                          <div className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            <span>{formatDate(transaction.transaction_date)}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -528,15 +842,25 @@ export default function TransactionsPage() {
           <Card>
             <CardContent className="p-8 text-center">
               <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Aucune transaction</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                {transactions.length === 0 ? "Aucune transaction" : "Aucun résultat"}
+              </h3>
               <p className="text-gray-500 mb-4">
-                {searchTerm
-                  ? "Aucune transaction ne correspond à votre recherche"
+                {searchTerm || categoryFilter !== "all" || accountFilter !== "all" || dateRange.start || dateRange.end
+                  ? "Aucune transaction ne correspond à vos critères de recherche"
                   : "Commencez par enregistrer votre première transaction"}
               </p>
-              <Button onClick={() => setIsDialogOpen(true)}>
+              <Button 
+                onClick={() => {
+                  if (transactions.length === 0) {
+                    setIsDialogOpen(true);
+                  } else {
+                    resetFilters();
+                  }
+                }}
+              >
                 <Plus className="h-4 w-4 mr-2" />
-                Nouvelle Transaction
+                {transactions.length === 0 ? "Nouvelle Transaction" : "Réinitialiser les filtres"}
               </Button>
             </CardContent>
           </Card>

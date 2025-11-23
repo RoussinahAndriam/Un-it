@@ -16,7 +16,7 @@ return new class extends Migration
             $table->foreignId('invoice_id')->constrained('invoices')->cascadeOnDelete();
             // Rapprochement avec une transaction bancaire/caisse
             $table->foreignId('transaction_id')->nullable()->constrained('transactions')->nullOnDelete();
-            $table->decimal('amount', 15, 2);
+            $table->decimal('amount', 15, 2)->default(0.00);
             $table->date('payment_date');
             $table->string('payment_method')->nullable();
             $table->timestamps();

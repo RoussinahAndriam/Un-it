@@ -18,9 +18,9 @@ return new class extends Migration
             $table->string('invoice_number')->unique()->nullable(); // Numérotation séquentielle
             $table->date('issue_date'); // Date d'émission
             $table->date('due_date'); // Date d'échéance
-            $table->decimal('subtotal', 15, 2); // Montant HT
+            $table->decimal('subtotal', 15, 2)->default(0.00); // Montant HT
             $table->decimal('tax_amount', 15, 2)->default(0.00); // Montant TVA
-            $table->decimal('total_amount', 15, 2); // Montant Total
+            $table->decimal('total_amount', 15, 2)->default(0.00); // Montant Total
             $table->decimal('amount_paid', 15, 2)->default(0.00); // Montant payé
             $table->enum('status', ['brouillon', 'envoye', 'partiellement_paye', 'paye', 'en_retard', 'annule']);
             $table->text('payment_terms')->nullable(); // Conditions de paiement
