@@ -245,9 +245,9 @@ class ReportController extends Controller
         }
     }
 
-    /**
-     * Export PDF des statistiques
-     */
+    
+     // Exportation en pdf des statistiques 
+    
     public function exportPdf(Request $request)
     {
         try {

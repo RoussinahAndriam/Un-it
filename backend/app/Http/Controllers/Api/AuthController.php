@@ -29,9 +29,9 @@ class AuthController extends Controller
             'password' => 'required|string|min:8|confirmed',
             'role' => 'sometimes|in:admin,comptable,employe'
         ]);
-
-        //asiana email existe deja dans user
-
+        
+        // recuperation de l'utilisateur par email
+     
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
