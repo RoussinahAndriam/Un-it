@@ -55,67 +55,70 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/constants";
 import { toast } from "sonner";
 
-const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>(
-  {}
-);
-const [resetPasswordErrors, setResetPasswordErrors] = useState<
-  Record<string, string>
->({});
-
-// Fonctions utilitaires pour les statuts
-const getStatusIcon = (status: ApplicationStatus) => {
-  switch (status) {
-    case "active":
-      return <CheckCircle className="h-4 w-4 text-green-600" />;
-    case "expired":
-      return <AlertTriangle className="h-4 w-4 text-red-600" />;
-    case "suspended":
-      return <Clock className="h-4 w-4 text-yellow-600" />;
-    case "pending":
-      return <Clock className="h-4 w-4 text-blue-600" />;
-    default:
-      return <Clock className="h-4 w-4 text-gray-600" />;
-  }
-};
-
-const getStatusColor = (status: ApplicationStatus) => {
-  switch (status) {
-    case "active":
-      return "bg-green-100 text-green-800 border-green-200";
-    case "expired":
-      return "bg-red-100 text-red-800 border-red-200";
-    case "suspended":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "pending":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
-  }
-};
-
-const getLicenseTypeColor = (licenseType: LicenseType) => {
-  switch (licenseType) {
-    case "subscription":
-      return "bg-purple-100 text-purple-800 border-purple-200";
-    case "perpetual":
-      return "bg-indigo-100 text-indigo-800 border-indigo-200";
-    case "trial":
-      return "bg-orange-100 text-orange-800 border-orange-200";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
-  }
-};
-
-const formatDate = (dateString: string | null) => {
-  if (!dateString) return "Non défini";
-  return new Date(dateString).toLocaleDateString("fr-FR");
-};
-
 export default function ApplicationPage() {
+  // ⚠️ TOUS LES HOOKS DOIVENT ÊTRE DÉCLARÉS ICI, DANS LE COMPOSANT ⚠️
+
+  const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>(
+    {}
+  );
+  const [resetPasswordErrors, setResetPasswordErrors] = useState<
+    Record<string, string>
+  >({});
+
+  // Fonctions utilitaires pour les statuts
+  const getStatusIcon = (status: ApplicationStatus) => {
+    switch (status) {
+      case "active":
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case "expired":
+        return <AlertTriangle className="h-4 w-4 text-red-600" />;
+      case "suspended":
+        return <Clock className="h-4 w-4 text-yellow-600" />;
+      case "pending":
+        return <Clock className="h-4 w-4 text-blue-600" />;
+      default:
+        return <Clock className="h-4 w-4 text-gray-600" />;
+    }
+  };
+
+  const getStatusColor = (status: ApplicationStatus) => {
+    switch (status) {
+      case "active":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "expired":
+        return "bg-red-100 text-red-800 border-red-200";
+      case "suspended":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "pending":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  const getLicenseTypeColor = (licenseType: LicenseType) => {
+    switch (licenseType) {
+      case "subscription":
+        return "bg-purple-100 text-purple-800 border-purple-200";
+      case "perpetual":
+        return "bg-indigo-100 text-indigo-800 border-indigo-200";
+      case "trial":
+        return "bg-orange-100 text-orange-800 border-orange-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return "Non défini";
+    return new Date(dateString).toLocaleDateString("fr-FR");
+  };
+
   const {
     applications,
     createApplication,
@@ -431,15 +434,15 @@ export default function ApplicationPage() {
           </p>
         </div>
 
-        {/* === POPOVER AJOUT/MODIFICATION === */}
-        <Popover
+        {/* === Dialog  AJOUT/MODIFICATION === */}
+        <Dialog
           open={isPopoverOpen}
           onOpenChange={(open) => {
             setIsPopoverOpen(open);
             if (!open) resetForm();
           }}
         >
-          <PopoverTrigger asChild>
+          <DialogTrigger asChild>
             <Button
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center gap-2 shadow-sm"
               disabled={submitting || loading}
@@ -451,41 +454,21 @@ export default function ApplicationPage() {
               )}
               Nouvelle Application
             </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-96 p-6 bg-white shadow-xl rounded-xl border-0 z-50">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  {isEditMode ? (
-                    submitting ? (
-                      <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                    ) : (
-                      <Edit className="h-5 w-5 text-blue-600" />
-                    )
-                  ) : submitting ? (
-                    <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                  ) : (
-                    <Plus className="h-5 w-5 text-blue-600" />
-                  )}
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {isEditMode
-                    ? "Modifier l'Application"
-                    : "Nouvelle Application"}
-                </h3>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setIsPopoverOpen(false);
-                  resetForm();
-                }}
-                disabled={submitting}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+          </DialogTrigger>
+          <DialogContent className="w-96 p-6 bg-white shadow-xl rounded-xl border-0 z-50">
+            <DialogHeader>
+                                        <DialogTitle>
+                                          {isEditMode
+                                            ? "Modifier l'application"
+                                            : "Nouvelle application"}
+                                        </DialogTitle>
+                                        <DialogDescription>
+                                          {isEditMode
+                                            ? "Modifiez les détails de l'application"
+                                            : "Ajoutez une nouvelle application à votre journal"}
+                                        </DialogDescription>
+                           </DialogHeader>
+       
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -690,8 +673,8 @@ export default function ApplicationPage() {
                 </Button>
               </div>
             </form>
-          </PopoverContent>
-        </Popover>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* === FILTRES === */}

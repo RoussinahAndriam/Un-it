@@ -30,6 +30,24 @@ class StoreAssetRequest extends FormRequest
             'acquisition_value' => 'nullable|numeric|min:0',
             'status' => ['required', Rule::in(['neuf', 'en_service', 'en_maintenance', 'hors_service'])],
             'location' => 'required|string|max:100',
+            'account_id' => 'nullable|exists:accounts,id',
         ];
     }
+     public function prepareForValidation()
+    {
+        // Convertir account_id en null si vide
+        if ($this->has('account_id') && $this->account_id === '') {
+            $this->merge([
+                'account_id' => null
+            ]);
+        }
+
+        // Convertir acquisition_value en float
+        if ($this->has('acquisition_value')) {
+            $this->merge([
+                'acquisition_value' => floatval($this->acquisition_value)
+            ]);
+        }
+    }
 }
+

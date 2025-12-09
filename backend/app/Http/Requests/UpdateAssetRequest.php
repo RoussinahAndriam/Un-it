@@ -31,6 +31,7 @@ class UpdateAssetRequest extends FormRequest
             'acquisition_value' => 'sometimes|nullable|numeric|min:0',
             'status' => ['sometimes', 'required', Rule::in(['neuf', 'en_service', 'en_maintenance', 'hors_service'])],
             'location' => 'sometimes|required|string|max:100',
+              'account_id' => 'nullable|exists:accounts,id',
         ];
     }
 }

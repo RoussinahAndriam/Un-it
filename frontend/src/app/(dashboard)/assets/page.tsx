@@ -33,6 +33,11 @@ import {
   Trash2,
   Filter,
   Download,
+  CreditCard,
+  Wallet,
+  Banknote,
+  Smartphone as MobileIcon,
+  AlertCircle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -53,6 +58,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/constants";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "Non définie";
@@ -100,12 +106,76 @@ const getAssetIcon = (name: string) => {
   return Box;
 };
 
+const getAccountIcon = (type: string) => {
+  switch (type) {
+    case "bancaire":
+      return CreditCard;
+    case "mobile_money":
+      return MobileIcon;
+    case "especes":
+      return Banknote;
+    default:
+      return Wallet;
+  }
+};
+
+const getAccountTypeLabel = (type: string) => {
+  switch (type) {
+    case "bancaire":
+      return "Compte Bancaire";
+    case "mobile_money":
+      return "Mobile Money";
+    case "especes":
+      return "Espèces";
+    default:
+      return "Autre";
+  }
+};
+
+const formatBalance = (balance: number, currency: string) => {
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: currency || "MGA",
+  }).format(balance);
+};
+
+const StatCard = ({
+  title,
+  value,
+  icon: Icon,
+  color,
+}: {
+  title: string;
+  value: string | number;
+  icon: any;
+  color: string;
+}) => (
+  <Card>
+    <CardContent className="p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600">{title}</p>
+          <p className={`text-2xl font-bold ${color} mt-2`}>
+            {typeof value === "number" ? value.toLocaleString() : value}
+          </p>
+        </div>
+        <div className="p-3 rounded-full bg-gray-50">
+          <Icon className="h-6 w-6 text-gray-600" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
+
 export default function AssetsPage() {
   const {
     assets,
+    accounts,
     loading,
+    loadingAccounts,
     error,
     fetchAssets,
+    fetchAccounts,
     createAsset,
     updateAsset,
     deleteAsset,
@@ -122,8 +192,8 @@ export default function AssetsPage() {
   const [locationFilter, setLocationFilter] = useState<AssetLocation | "all">(
     "all"
   );
-
   const [filters, setFilters] = useState<AssetFilters>({});
+  const [balanceError, setBalanceError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CreateAssetData>({
     name: "",
@@ -133,11 +203,16 @@ export default function AssetsPage() {
     acquisition_value: 0,
     status: "neuf",
     location: "en_stock",
+    account_id: undefined,
   });
 
   useEffect(() => {
     fetchAssets(filters);
-  }, [filters]);
+  }, [filters, fetchAssets]);
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   useEffect(() => {
     const newFilters: AssetFilters = {};
@@ -147,20 +222,55 @@ export default function AssetsPage() {
     setFilters(newFilters);
   }, [activeTab, locationFilter, searchTerm]);
 
+  useEffect(() => {
+    if (
+      formData.account_id &&
+      formData.acquisition_value &&
+      formData.acquisition_value > 0
+    ) {
+      const selectedAccount = accounts.find(
+        (acc) => acc.id === formData.account_id
+      );
+      if (
+        selectedAccount &&
+        selectedAccount.balance < formData.acquisition_value
+      ) {
+        setBalanceError(
+          `Solde insuffisant. Solde disponible: ${formatBalance(
+            selectedAccount.balance,
+            selectedAccount.currency
+          )}`
+        );
+      } else {
+        setBalanceError(null);
+      }
+    } else {
+      setBalanceError(null);
+    }
+  }, [formData.account_id, formData.acquisition_value, accounts]);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+     console.log("Form data being submitted:", formData);
+
+    if (balanceError) {
+      alert("Veuillez vérifier le solde du compte sélectionné");
+      return;
+    }
+
     setSubmitting(true);
     clearError();
 
     try {
       if (isEditMode && selectedAsset) {
+              console.log("Updating asset:", selectedAsset.id, formData); 
         await updateAsset(selectedAsset.id, formData);
       } else {
         await createAsset(formData);
       }
       resetForm();
       setIsDialogOpen(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur:", err);
     } finally {
       setSubmitting(false);
@@ -176,40 +286,19 @@ export default function AssetsPage() {
       acquisition_value: 0,
       status: "neuf",
       location: "en_stock",
+      account_id: undefined,
     });
     setIsEditMode(false);
     setSelectedAsset(null);
+    setBalanceError(null);
+  };
+
+  const getAccountInfo = (accountId: number | null | undefined) => {
+    if (!accountId) return null;
+    return accounts.find((acc) => acc.id === accountId);
   };
 
   const statistics = getAssetsStatistics();
-
-  const StatCard = ({
-    title,
-    value,
-    icon: Icon,
-    color,
-  }: {
-    title: string;
-    value: string | number;
-    icon: any;
-    color: string;
-  }) => (
-    <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-gray-600">{title}</p>
-            <p className={`text-2xl font-bold ${color} mt-2`}>
-              {typeof value === "number" ? value.toLocaleString() : value}
-            </p>
-          </div>
-          <div className="p-3 rounded-full bg-gray-50">
-            <Icon className="h-6 w-6 text-gray-600" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
@@ -229,7 +318,7 @@ export default function AssetsPage() {
                 Nouvel Actif
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {isEditMode ? "Modifier l'Actif" : "Nouvel Actif Matériel"}
@@ -243,7 +332,7 @@ export default function AssetsPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Nom de l'actif</Label>
+                    <Label>Nom de l'actif *</Label>
                     <Input
                       value={formData.name}
                       onChange={(e) =>
@@ -300,15 +389,18 @@ export default function AssetsPage() {
                     />
                   </div>
                   <div>
-                    <Label>Valeur d'acquisition</Label>
+                    <Label>Valeur d'acquisition (MGA)</Label>
                     <Input
                       type="number"
                       step="0.01"
+                      min="0"
                       value={formData.acquisition_value || ""}
                       onChange={(e) =>
                         setFormData((prev) => ({
                           ...prev,
-                          acquisition_value: parseFloat(e.target.value),
+                          acquisition_value: e.target.value
+                            ? parseFloat(e.target.value)
+                            : 0,
                         }))
                       }
                       placeholder="0.00"
@@ -318,7 +410,7 @@ export default function AssetsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Statut</Label>
+                    <Label>Statut *</Label>
                     <Select
                       value={formData.status}
                       onValueChange={(value: AssetStatus) =>
@@ -341,7 +433,7 @@ export default function AssetsPage() {
                     </Select>
                   </div>
                   <div>
-                    <Label>Localisation</Label>
+                    <Label>Localisation *</Label>
                     <Select
                       value={formData.location}
                       onValueChange={(value: AssetLocation) =>
@@ -362,13 +454,87 @@ export default function AssetsPage() {
                   </div>
                 </div>
 
+                <div>
+                  <Label>Compte de financement</Label>
+                  <Select
+                    value={formData.account_id?.toString() || "none"}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        account_id:
+                          value === "none" ? undefined : parseInt(value),
+                      }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionnez un compte" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Aucun compte</SelectItem>
+                      {loadingAccounts ? (
+                        <SelectItem value="loading" disabled>
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Chargement des comptes...
+                          </div>
+                        </SelectItem>
+                      ) : (
+                        accounts.map((account) => {
+                          const AccountIcon = getAccountIcon(account.type);
+                          return (
+                            <SelectItem
+                              key={account.id}
+                              value={account.id.toString()}
+                            >
+                              <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-2">
+                                  <AccountIcon className="h-4 w-4" />
+                                  <span>{account.name}</span>
+                                </div>
+                                <span className="text-sm text-gray-500">
+                                  {formatBalance(
+                                    account.balance,
+                                    account.currency
+                                  )}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })
+                      )}
+                    </SelectContent>
+                  </Select>
+
+                  {balanceError && (
+                    <Alert variant="destructive" className="mt-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{balanceError}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  {formData.account_id && !balanceError && (
+                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium">Solde disponible:</span>
+                        <span className="font-bold">
+                          {formatBalance(
+                            getAccountInfo(formData.account_id)?.balance || 0,
+                            getAccountInfo(formData.account_id)?.currency ||
+                              "MGA"
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={resetForm}>
                     Annuler
                   </Button>
                   <Button
                     type="submit"
-                    disabled={submitting}
+                    disabled={submitting || !!balanceError}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     {submitting ? (
@@ -383,16 +549,10 @@ export default function AssetsPage() {
               </form>
             </DialogContent>
           </Dialog>
-
-          <Button variant="outline" className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Exporter
-          </Button>
         </div>
       </div>
 
-      {/* Statistiques */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
         <StatCard
           title="Total Actifs"
           value={statistics.total}
@@ -417,9 +577,26 @@ export default function AssetsPage() {
           icon={Server}
           color="text-purple-600"
         />
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Comptes</p>
+                <p className="text-2xl font-bold text-indigo-600 mt-2">
+                  {accounts.length}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {loadingAccounts ? "Chargement..." : "Actifs"}
+                </p>
+              </div>
+              <div className="p-3 rounded-full bg-indigo-50">
+                <CreditCard className="h-6 w-6 text-indigo-600" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filtres et recherche */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1">
           <div className="relative">
@@ -465,7 +642,6 @@ export default function AssetsPage() {
         </div>
       </div>
 
-      {/* Liste des actifs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
           [...Array(6)].map((_, i) => (
@@ -490,6 +666,8 @@ export default function AssetsPage() {
         ) : assets.length > 0 ? (
           assets.map((asset) => {
             const AssetIcon = getAssetIcon(asset.name);
+            const account = getAccountInfo(asset.account_id);
+
             return (
               <Card
                 key={asset.id}
@@ -541,6 +719,23 @@ export default function AssetsPage() {
                     </p>
                   )}
 
+                  {account && (
+                    <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-md">
+                      {(() => {
+                        const AccountIcon = getAccountIcon(account.type);
+                        return (
+                          <AccountIcon className="h-4 w-4 text-gray-600" />
+                        );
+                      })()}
+                      <span className="text-sm font-medium">
+                        {account.name}
+                      </span>
+                      <span className="text-xs text-gray-500 ml-auto">
+                        {formatBalance(account.balance, account.currency)}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center pt-2">
                     <div className="text-xs text-gray-500">
                       {asset.acquisition_date &&
@@ -564,6 +759,7 @@ export default function AssetsPage() {
                               acquisition_value: asset.acquisition_value || 0,
                               status: asset.status,
                               location: asset.location,
+                              account_id: asset.account_id || undefined,
                             });
                             setIsEditMode(true);
                             setIsDialogOpen(true);
@@ -574,7 +770,15 @@ export default function AssetsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => deleteAsset(asset.id)}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                "Êtes-vous sûr de vouloir supprimer cet actif ?"
+                              )
+                            ) {
+                              deleteAsset(asset.id);
+                            }
+                          }}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Supprimer

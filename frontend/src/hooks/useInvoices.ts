@@ -83,14 +83,17 @@ export const useInvoices = () => {
     setError(null);
     try {
       const params = new URLSearchParams();
+
+      // Nettoyage des filtres
       Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== "") {
+        if (value !== undefined && value !== null && value !== "") {
           params.append(key, value.toString());
         }
       });
 
+      console.log("Fetching invoices with filters:", filters); // Debug
       const response = await api.get(`/invoices?${params}`);
-      setInvoices(response.data.data);
+      setInvoices(response.data.data || response.data); // Adaptez selon votre API
     } catch (err) {
       setError("Erreur lors du chargement des factures");
       console.error("Error fetching invoices:", err);
@@ -217,12 +220,9 @@ export const useInvoices = () => {
 
   const downloadDocument = useCallback(async (documentId: number) => {
     try {
-      const response = await api.get(
-        `/invoices/documents/${documentId}`,
-        {
-          responseType: "blob",
-        }
-      );
+      const response = await api.get(`/invoices/documents/${documentId}`, {
+        responseType: "blob",
+      });
 
       // Créer un URL temporaire pour le téléchargement
       const url = window.URL.createObjectURL(new Blob([response.data]));

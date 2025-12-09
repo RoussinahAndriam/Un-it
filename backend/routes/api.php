@@ -52,6 +52,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/recurring-operations/{id}/execute', [RecurringOperationController::class, 'execute']);
     
     Route::apiResource('/assets', AssetController::class);
+    Route::get('available-accounts', [AssetController::class, 'getAvailableAccounts']);
     Route::apiResource('/asset-loans', AssetLoanController::class);
     Route::put('/asset-loans/{id}/return', [AssetLoanController::class, 'returnLoan']);
     

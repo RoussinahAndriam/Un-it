@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import api from "@/lib/api";
+import { Account } from "@/types";
 
 export type AssetStatus =
   | "neuf"
@@ -17,6 +18,8 @@ export interface Asset {
   acquisition_value: number | null;
   status: AssetStatus;
   location: AssetLocation;
+  account_id: number | null;
+  account?: Account;
   created_at?: string;
   updated_at?: string;
   current_loan?: AssetLoan; // Relation chargée
@@ -30,6 +33,7 @@ export interface CreateAssetData {
   acquisition_value?: number | null;
   status: AssetStatus;
   location: AssetLocation;
+  account_id?: number | null;
 }
 
 export interface UpdateAssetData extends Partial<CreateAssetData> {}
@@ -37,11 +41,14 @@ export interface UpdateAssetData extends Partial<CreateAssetData> {}
 interface UseAssetReturn {
   // State
   assets: Asset[];
+  accounts: Account[];
   loading: boolean;
+  loadingAccounts: boolean;
   error: string | null;
 
   // Actions
   fetchAssets: (filters?: AssetFilters) => Promise<void>;
+  fetchAccounts: () => Promise<Account[]>;
   createAsset: (data: CreateAssetData) => Promise<Asset>;
   updateAsset: (id: number, data: UpdateAssetData) => Promise<Asset>;
   deleteAsset: (id: number) => Promise<void>;
@@ -79,7 +86,9 @@ export interface AssetStatistics {
 
 export const useAsset = (): UseAssetReturn => {
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clearError = useCallback(() => setError(null), []);
@@ -107,6 +116,7 @@ export const useAsset = (): UseAssetReturn => {
         if (filters?.location) params.append("location", filters.location);
         if (filters?.search) params.append("search", filters.search);
 
+        params.append("include", "account");
         const response = await api.get(`/assets?${params.toString()}`);
         setAssets(response.data.data);
       } catch (error: any) {
@@ -118,16 +128,57 @@ export const useAsset = (): UseAssetReturn => {
     [clearError]
   );
 
+  const fetchAccounts = useCallback(async (): Promise<Account[]> => {
+    try {
+      setLoadingAccounts(true);
+      const response = await api.get("/accounts");
+      const accountsData = response.data.data || response.data;
+      setAccounts(accountsData);
+      return accountsData;
+    } catch (error: any) {
+      console.error("Erreur lors du chargement des comptes:", error);
+      return [];
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }, []);
+
   const createAsset = useCallback(
     async (data: CreateAssetData): Promise<Asset> => {
       try {
         setLoading(true);
         clearError();
 
+        // Validation supplémentaire
+        if (
+          data.account_id &&
+          data.acquisition_value !== undefined &&
+          data.acquisition_value !== null &&
+          data.acquisition_value > 0
+        ) {
+          const selectedAccount = accounts.find(
+            (acc) => acc.id === data.account_id
+          );
+          if (
+            selectedAccount &&
+            selectedAccount.balance < (data.acquisition_value || 0)
+          ) {
+            throw new Error(
+              `Solde insuffisant sur le compte ${selectedAccount.name}. Solde disponible: ${selectedAccount.balance} ${selectedAccount.currency}`
+            );
+          }
+        }
+
         const response = await api.post("/assets", data);
         const newAsset = response.data.data;
 
         setAssets((prev) => [...prev, newAsset]);
+
+        // Mettre à jour la liste des comptes si nécessaire
+        if (data.account_id) {
+          await fetchAccounts();
+        }
+
         return newAsset;
       } catch (error: any) {
         throw handleError(error, "Erreur lors de la création de l'actif");
@@ -135,31 +186,41 @@ export const useAsset = (): UseAssetReturn => {
         setLoading(false);
       }
     },
-    [clearError]
+    [clearError, accounts, fetchAccounts]
   );
 
-  const updateAsset = useCallback(
-    async (id: number, data: UpdateAssetData): Promise<Asset> => {
-      try {
-        setLoading(true);
-        clearError();
+ const updateAsset = useCallback(
+   async (id: number, data: UpdateAssetData): Promise<Asset> => {
+     try {
+       setLoading(true);
+       clearError();
 
-        const response = await api.put(`/assets/${id}`, data);
-        const updatedAsset = response.data.data;
+       console.log("Updating asset:", { id, data }); // <-- Ajoutez ce log
 
-        setAssets((prev) =>
-          prev.map((asset) => (asset.id === id ? updatedAsset : asset))
-        );
-        return updatedAsset;
-      } catch (error: any) {
-        throw handleError(error, "Erreur lors de la mise à jour de l'actif");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [clearError]
-  );
+       const response = await api.put(`/assets/${id}`, data);
+       const updatedAsset = response.data.data;
 
+       console.log("Update response:", updatedAsset); // <-- Ajoutez ce log
+
+       setAssets((prev) =>
+         prev.map((asset) => (asset.id === id ? updatedAsset : asset))
+       );
+
+       // Rafraîchir les comptes si le compte a changé
+       if (data.account_id !== undefined) {
+         await fetchAccounts();
+       }
+
+       return updatedAsset;
+     } catch (error: any) {
+       console.error("Update error:", error); // <-- Ajoutez ce log
+       throw handleError(error, "Erreur lors de la mise à jour de l'actif");
+     } finally {
+       setLoading(false);
+     }
+   },
+   [clearError, fetchAccounts]
+ );
   const deleteAsset = useCallback(
     async (id: number): Promise<void> => {
       try {
@@ -169,13 +230,19 @@ export const useAsset = (): UseAssetReturn => {
         await api.delete(`/assets/${id}`);
 
         setAssets((prev) => prev.filter((asset) => asset.id !== id));
+
+        // Rafraîchir les comptes si l'actif avait un compte
+        const deletedAsset = assets.find((asset) => asset.id === id);
+        if (deletedAsset?.account_id) {
+          await fetchAccounts();
+        }
       } catch (error: any) {
         throw handleError(error, "Erreur lors de la suppression de l'actif");
       } finally {
         setLoading(false);
       }
     },
-    [clearError]
+    [clearError, assets, fetchAccounts]
   );
 
   const getAssetById = useCallback(
@@ -222,12 +289,11 @@ export const useAsset = (): UseAssetReturn => {
       pret_employe: getAssetsByLocation("pret_employe").length,
     };
 
-    let totalValue = 0
-    for(const a of assets){
-      const amount = Number(a.acquisition_value); 
-      totalValue += amount
+    let totalValue = 0;
+    for (const a of assets) {
+      const amount = Number(a.acquisition_value) || 0;
+      totalValue += amount;
     }
-
 
     return {
       total: assets.length,
@@ -240,8 +306,11 @@ export const useAsset = (): UseAssetReturn => {
   return {
     assets,
     loading,
+    loadingAccounts,
     error,
+    accounts,
     fetchAssets,
+    fetchAccounts,
     createAsset,
     updateAsset,
     deleteAsset,
