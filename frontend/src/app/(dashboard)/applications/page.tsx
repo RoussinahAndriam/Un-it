@@ -1,3 +1,4 @@
+// app/applications/page.tsx
 "use client";
 
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
@@ -5,13 +6,19 @@ import {
   useApplication,
   ApplicationStatus,
   LicenseType,
+  CreatedBy,
   CreateApplicationData,
+  Account,
 } from "@/hooks/useApplication";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,16 +37,18 @@ import {
   Settings,
   CreditCard,
   TrendingUp,
+  CheckCircle,
   Users,
   PieChart,
   Loader2,
   Edit,
   Trash2,
-  X,
   Calendar,
   AlertTriangle,
-  CheckCircle,
   Clock,
+  Building,
+  ExternalLink,
+  Wallet,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -47,30 +56,43 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { formatCurrency } from "@/constants";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function ApplicationPage() {
-  // ⚠️ TOUS LES HOOKS DOIVENT ÊTRE DÉCLARÉS ICI, DANS LE COMPOSANT ⚠️
+  // État pour gérer le checkbox "has_license"
+  const [hasLicense, setHasLicense] = useState(false);
 
-  const [userFormErrors, setUserFormErrors] = useState<Record<string, string>>(
-    {}
-  );
-  const [resetPasswordErrors, setResetPasswordErrors] = useState<
-    Record<string, string>
-  >({});
+  // État pour le filtre de compte
+  const [accountFilter, setAccountFilter] = useState<number | "all">("all");
 
-  // Fonctions utilitaires pour les statuts
+  // État pour le filtre de type de création
+  const [creationTypeFilter, setCreationTypeFilter] = useState<
+    CreatedBy | "all"
+  >("all");
+
+  const {
+    applications,
+    accounts,
+    createApplication,
+    updateApplication,
+    deleteApplication,
+    fetchApplications,
+    fetchAccounts,
+    linkToAccount,
+    loading,
+    error,
+    clearError,
+    getTotalCost,
+    getApplicationsByStatus,
+    getApplicationsByCreationType,
+    getApplicationsByAccount,
+  } = useApplication();
+
+  // Fonctions utilitaires
   const getStatusIcon = (status: ApplicationStatus) => {
     switch (status) {
       case "active":
@@ -114,38 +136,43 @@ export default function ApplicationPage() {
     }
   };
 
+  const getCreationTypeColor = (createdBy: CreatedBy) => {
+    switch (createdBy) {
+      case "company":
+        return "bg-blue-100 text-blue-800 border-blue-200";
+      case "external":
+        return "bg-purple-100 text-purple-800 border-purple-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  const getCreationTypeIcon = (createdBy: CreatedBy) => {
+    switch (createdBy) {
+      case "company":
+        return <Building className="h-3 w-3" />;
+      case "external":
+        return <ExternalLink className="h-3 w-3" />;
+      default:
+        return null;
+    }
+  };
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Non défini";
     return new Date(dateString).toLocaleDateString("fr-FR");
   };
 
-  const {
-    applications,
-    createApplication,
-    updateApplication,
-    deleteApplication,
-    fetchApplications,
-    loading,
-    error,
-    clearError,
-    getTotalCost,
-    getApplicationsByStatus,
-  } = useApplication();
-
+  // États du formulaire et UI
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | "all">(
     "all"
   );
   const [submitting, setSubmitting] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [selectedApplication, setSelectedApplication] = useState<any | null>(
     null
   );
-  const [applicationToDelete, setApplicationToDelete] = useState<any | null>(
-    null
-  );
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingApplicationId, setEditingApplicationId] = useState<
     number | null
@@ -155,16 +182,33 @@ export default function ApplicationPage() {
     name: "",
     cost: 0,
     user_id: null,
-    license_type: "subscription",
+    license_type: null,
     current_users: 0,
     max_users: null,
     purchase_date: null,
     renewal_date: null,
     status: "active",
+    account_id: null,
+    has_license: false,
   });
 
+  // Gestion du changement de formulaire
   const handleChange = (e: ChangeEvent<HTMLInputElement>): void => {
-    const { name, value } = e.target;
+    const { name, value, type } = e.target;
+
+    if (type === "checkbox") {
+      const checked = (e.target as HTMLInputElement).checked;
+      if (name === "has_license") {
+        setHasLicense(checked);
+        setFormData((prev) => ({
+          ...prev,
+          has_license: checked,
+          license_type: checked ? "subscription" : null,
+        }));
+      }
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       [name]:
@@ -183,6 +227,16 @@ export default function ApplicationPage() {
     }));
   };
 
+  const handleCheckboxChange = (checked: boolean) => {
+    setHasLicense(checked);
+    setFormData((prev) => ({
+      ...prev,
+      has_license: checked,
+      license_type: checked ? "subscription" : null,
+    }));
+  };
+
+  // Soumission du formulaire
   const handleSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
     setSubmitting(true);
@@ -204,7 +258,6 @@ export default function ApplicationPage() {
       }
       resetForm();
       setIsPopoverOpen(false);
-      // Recharger les applications après modification
       fetchApplications();
     } catch (err: any) {
       console.error("Erreur lors de l'opération :", err);
@@ -217,6 +270,7 @@ export default function ApplicationPage() {
     }
   };
 
+  // Gestion des actions
   const handleViewDetails = (application: any) => {
     setSelectedApplication(application);
     setIsDetailsModalOpen(true);
@@ -235,43 +289,14 @@ export default function ApplicationPage() {
       purchase_date: application.purchase_date,
       renewal_date: application.renewal_date,
       status: application.status,
+      account_id: application.account_id,
+      has_license: !!application.license_type,
     });
+    setHasLicense(!!application.license_type);
     setIsEditMode(true);
     setIsPopoverOpen(true);
   };
 
-  const handleDeleteClick = (application: any) => {
-    setApplicationToDelete(application);
-    setIsDeleteModalOpen(true);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (applicationToDelete) {
-      setDeleting(true);
-      clearError();
-      try {
-        await deleteApplication(applicationToDelete.id);
-        toast.success("Application supprimée avec succès", {
-          description: `"${applicationToDelete.name}" a été supprimée`,
-          icon: <CheckCircle className="h-4 w-4 text-green-500" />,
-        });
-        setIsDeleteModalOpen(false);
-        setApplicationToDelete(null);
-        // Recharger les applications après suppression
-        fetchApplications();
-      } catch (err: any) {
-        console.error("Erreur lors de la suppression :", err);
-        toast.error("Erreur lors de la suppression", {
-          description: err.message || "Impossible de supprimer l'application",
-          icon: <AlertTriangle className="h-4 w-4 text-red-500" />,
-        });
-      } finally {
-        setDeleting(false);
-      }
-    }
-  };
-
-  // 🔥 SUPPRESSION DIRECTE AVEC CONFIRMATION STYLÉE
   const handleQuickDelete = (application: any) => {
     toast.custom(
       (t) => (
@@ -332,18 +357,37 @@ export default function ApplicationPage() {
     );
   };
 
+  const handleLinkToAccount = async (application: any, accountId: number) => {
+    try {
+      await linkToAccount(application.id, accountId);
+      toast.success("Application liée au compte", {
+        description: `"${application.name}" a été liée au compte`,
+        icon: <CheckCircle className="h-4 w-4 text-green-500" />,
+      });
+      fetchApplications();
+    } catch (error: any) {
+      toast.error("Erreur", {
+        description: "Impossible de lier au compte",
+      });
+    }
+  };
+
+  // Réinitialiser le formulaire
   const resetForm = () => {
     setFormData({
       name: "",
       cost: 0,
       user_id: null,
-      license_type: "subscription",
+      license_type: null,
       current_users: 0,
       max_users: null,
       purchase_date: null,
       renewal_date: null,
       status: "active",
+      account_id: null,
+      has_license: false,
     });
+    setHasLicense(false);
     setIsEditMode(false);
     setSelectedApplication(null);
     setEditingApplicationId(null);
@@ -351,10 +395,30 @@ export default function ApplicationPage() {
   };
 
   // Filtrer les applications
-  const filteredApplications =
-    statusFilter === "all"
-      ? applications
-      : getApplicationsByStatus(statusFilter);
+  const getFilteredApplications = () => {
+    let filtered = applications;
+
+    // Filtre par statut
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((app) => app.status === statusFilter);
+    }
+
+    // Filtre par compte
+    if (accountFilter !== "all") {
+      filtered = filtered.filter((app) => app.account_id === accountFilter);
+    }
+
+    // Filtre par type de création
+    if (creationTypeFilter !== "all") {
+      filtered = filtered.filter(
+        (app) => app.created_by === creationTypeFilter
+      );
+    }
+
+    return filtered;
+  };
+
+  const filteredApplications = getFilteredApplications();
 
   // Calcul des statistiques
   const totalCost = getTotalCost();
@@ -368,12 +432,16 @@ export default function ApplicationPage() {
     return renewalDate <= thirtyDaysFromNow && renewalDate >= today;
   }).length;
 
-  // Charger les applications au montage
+  const companyCreatedApps = getApplicationsByCreationType("company").length;
+  const externalLicensedApps = getApplicationsByCreationType("external").length;
+
+  // Charger les données au montage
   useEffect(() => {
     fetchApplications();
-  }, [fetchApplications]);
+    fetchAccounts();
+  }, [fetchApplications, fetchAccounts]);
 
-  // 🔥 TOAST DE BIENVENUE AU CHARGEMENT
+  // Toast de bienvenue
   useEffect(() => {
     if (!loading && applications.length > 0) {
       toast.success(`Chargement réussi`, {
@@ -383,6 +451,7 @@ export default function ApplicationPage() {
     }
   }, [loading, applications.length]);
 
+  // Composant de carte de statistiques
   const StatCard = ({
     title,
     value,
@@ -423,7 +492,7 @@ export default function ApplicationPage() {
         <div className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40" />
       )}
 
-      {/* === HEADER === */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -434,7 +503,7 @@ export default function ApplicationPage() {
           </p>
         </div>
 
-        {/* === Dialog  AJOUT/MODIFICATION === */}
+        {/* Bouton Nouvelle Application */}
         <Dialog
           open={isPopoverOpen}
           onOpenChange={(open) => {
@@ -457,18 +526,15 @@ export default function ApplicationPage() {
           </DialogTrigger>
           <DialogContent className="w-96 p-6 bg-white shadow-xl rounded-xl border-0 z-50">
             <DialogHeader>
-                                        <DialogTitle>
-                                          {isEditMode
-                                            ? "Modifier l'application"
-                                            : "Nouvelle application"}
-                                        </DialogTitle>
-                                        <DialogDescription>
-                                          {isEditMode
-                                            ? "Modifiez les détails de l'application"
-                                            : "Ajoutez une nouvelle application à votre journal"}
-                                        </DialogDescription>
-                           </DialogHeader>
-       
+              <DialogTitle>
+                {isEditMode ? "Modifier l'application" : "Nouvelle application"}
+              </DialogTitle>
+              <DialogDescription>
+                {isEditMode
+                  ? "Modifiez les détails de l'application"
+                  : "Ajoutez une nouvelle application à votre journal"}
+              </DialogDescription>
+            </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -476,7 +542,7 @@ export default function ApplicationPage() {
                   htmlFor="name"
                   className="text-sm font-medium text-gray-700"
                 >
-                  Nom de l'application
+                  Nom de l'application *
                 </Label>
                 <Input
                   id="name"
@@ -495,7 +561,7 @@ export default function ApplicationPage() {
                   htmlFor="cost"
                   className="text-sm font-medium text-gray-700"
                 >
-                  Coût
+                  Coût *
                 </Label>
                 <Input
                   id="cost"
@@ -511,23 +577,77 @@ export default function ApplicationPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label
+                  htmlFor="account_id"
+                  className="text-sm font-medium text-gray-700"
+                >
+                  Compte associé *
+                </Label>
+                <Select
+                  value={formData.account_id?.toString() || ""}
+                  onValueChange={(value) =>
+                    handleSelectChange("account_id", value)
+                  }
+                  disabled={submitting}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionnez un compte" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account) => (
+                      <SelectItem
+                        key={account.id}
+                        value={account.id.toString()}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Wallet className="h-4 w-4" />
+                          <span>{account.name}</span>
+                          <span className="text-xs text-gray-500">
+                            ({formatCurrency(account.balance)}{" "}
+                            {account.currency})
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Checkbox pour licence */}
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="has_license"
+                  checked={hasLicense}
+                  onCheckedChange={handleCheckboxChange}
+                  disabled={submitting}
+                />
+                <Label
+                  htmlFor="has_license"
+                  className="text-sm font-medium text-gray-700"
+                >
+                  Cette application a une licence externe
+                </Label>
+              </div>
+
+              {/* Type de licence - Conditionnel */}
+              {hasLicense && (
                 <div className="space-y-2">
                   <Label
                     htmlFor="license_type"
                     className="text-sm font-medium text-gray-700"
                   >
-                    Type de licence
+                    Type de licence *
                   </Label>
                   <Select
-                    value={formData.license_type}
+                    value={formData.license_type || ""}
                     onValueChange={(value) =>
                       handleSelectChange("license_type", value)
                     }
                     disabled={submitting}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Sélectionnez un type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="subscription">Abonnement</SelectItem>
@@ -536,13 +656,15 @@ export default function ApplicationPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              )}
 
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label
                     htmlFor="status"
                     className="text-sm font-medium text-gray-700"
                   >
-                    Statut
+                    Statut *
                   </Label>
                   <Select
                     value={formData.status}
@@ -562,9 +684,7 @@ export default function ApplicationPage() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label
                     htmlFor="current_users"
@@ -583,7 +703,9 @@ export default function ApplicationPage() {
                     disabled={submitting}
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label
                     htmlFor="max_users"
@@ -602,9 +724,7 @@ export default function ApplicationPage() {
                     disabled={submitting}
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label
                     htmlFor="purchase_date"
@@ -622,24 +742,24 @@ export default function ApplicationPage() {
                     disabled={submitting}
                   />
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="renewal_date"
-                    className="text-sm font-medium text-gray-700"
-                  >
-                    Date de renouvellement
-                  </Label>
-                  <Input
-                    id="renewal_date"
-                    name="renewal_date"
-                    type="date"
-                    value={formData.renewal_date || ""}
-                    onChange={handleChange}
-                    className="w-full"
-                    disabled={submitting}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label
+                  htmlFor="renewal_date"
+                  className="text-sm font-medium text-gray-700"
+                >
+                  Date de renouvellement
+                </Label>
+                <Input
+                  id="renewal_date"
+                  name="renewal_date"
+                  type="date"
+                  value={formData.renewal_date || ""}
+                  onChange={handleChange}
+                  className="w-full"
+                  disabled={submitting}
+                />
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -677,9 +797,9 @@ export default function ApplicationPage() {
         </Dialog>
       </div>
 
-      {/* === FILTRES === */}
+      {/* Filtres */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <Select
             value={statusFilter}
             onValueChange={(value: ApplicationStatus | "all") =>
@@ -697,6 +817,51 @@ export default function ApplicationPage() {
               <SelectItem value="pending">En attente</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select
+            value={accountFilter.toString()}
+            onValueChange={(value) =>
+              setAccountFilter(value === "all" ? "all" : parseInt(value))
+            }
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Filtrer par compte" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les comptes</SelectItem>
+              {accounts.map((account) => (
+                <SelectItem key={account.id} value={account.id.toString()}>
+                  {account.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={creationTypeFilter}
+            onValueChange={(value: CreatedBy | "all") =>
+              setCreationTypeFilter(value)
+            }
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Type de création" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les types</SelectItem>
+              <SelectItem value="company">
+                <div className="flex items-center gap-2">
+                  <Building className="h-3 w-3" />
+                  <span>Interne</span>
+                </div>
+              </SelectItem>
+              <SelectItem value="external">
+                <div className="flex items-center gap-2">
+                  <ExternalLink className="h-3 w-3" />
+                  <span>Externe</span>
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <span className="text-sm text-gray-500">
           {filteredApplications.length} application
@@ -704,8 +869,8 @@ export default function ApplicationPage() {
         </span>
       </div>
 
-      {/* === RÉSUMÉ STATISTIQUES === */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      {/* Statistiques */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
           title="Coût Total"
           value={formatCurrency(totalCost)}
@@ -719,6 +884,13 @@ export default function ApplicationPage() {
           color="text-green-600"
         />
         <StatCard
+          title="Interne / Externe"
+          value={`${companyCreatedApps} / ${externalLicensedApps}`}
+          icon={PieChart}
+          color="text-purple-600"
+          description="Créées par l'entreprise / Avec licence"
+        />
+        <StatCard
           title="Expirent bientôt"
           value={expiringApplications}
           icon={AlertTriangle}
@@ -727,7 +899,7 @@ export default function ApplicationPage() {
         />
       </div>
 
-      {/* === LISTE DES APPLICATIONS === */}
+      {/* Liste des applications */}
       <div className="space-y-4">
         {loading && !submitting ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -775,7 +947,7 @@ export default function ApplicationPage() {
                             <Loader2 className="h-3 w-3 text-blue-600 animate-spin" />
                           )}
                         </CardTitle>
-                        <div className="flex gap-2 mt-1">
+                        <div className="flex flex-wrap gap-2 mt-1">
                           <Badge
                             variant="secondary"
                             className={getStatusColor(application.status)}
@@ -785,13 +957,28 @@ export default function ApplicationPage() {
                               {application.status}
                             </div>
                           </Badge>
+                          {application.license_type && (
+                            <Badge
+                              variant="outline"
+                              className={getLicenseTypeColor(
+                                application.license_type
+                              )}
+                            >
+                              {application.license_type}
+                            </Badge>
+                          )}
                           <Badge
                             variant="outline"
-                            className={getLicenseTypeColor(
-                              application.license_type
+                            className={getCreationTypeColor(
+                              application.created_by
                             )}
                           >
-                            {application.license_type}
+                            <div className="flex items-center gap-1">
+                              {getCreationTypeIcon(application.created_by)}
+                              {application.created_by === "company"
+                                ? "Interne"
+                                : "Externe"}
+                            </div>
                           </Badge>
                         </div>
                       </div>
@@ -808,6 +995,18 @@ export default function ApplicationPage() {
                   </div>
 
                   <div className="text-sm text-gray-600 space-y-2">
+                    {application.account && (
+                      <div className="flex justify-between items-center">
+                        <span>Compte:</span>
+                        <Badge
+                          variant="outline"
+                          className="flex items-center gap-1"
+                        >
+                          <Wallet className="h-3 w-3" />
+                          {application.account.name}
+                        </Badge>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>Utilisateurs:</span>
                       <span className="font-medium">
@@ -864,6 +1063,35 @@ export default function ApplicationPage() {
                           )}
                           Modifier
                         </DropdownMenuItem>
+                        {application.account_id && (
+                          <DropdownMenuItem asChild>
+                            <Select
+                              onValueChange={(value) =>
+                                handleLinkToAccount(
+                                  application,
+                                  parseInt(value)
+                                )
+                              }
+                            >
+                              <SelectTrigger className="border-0 p-0 h-auto">
+                                <div className="flex items-center cursor-pointer w-full px-2 py-1.5 text-sm">
+                                  <Wallet className="h-4 w-4 mr-2" />
+                                  Changer de compte
+                                </div>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {accounts.map((account) => (
+                                  <SelectItem
+                                    key={account.id}
+                                    value={account.id.toString()}
+                                  >
+                                    {account.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={() => handleQuickDelete(application)}
                           className="text-red-600 focus:text-red-600"
@@ -887,9 +1115,11 @@ export default function ApplicationPage() {
                 Aucune application trouvée
               </h3>
               <p className="text-gray-500 mb-4">
-                {statusFilter === "all"
+                {statusFilter === "all" &&
+                accountFilter === "all" &&
+                creationTypeFilter === "all"
                   ? "Commencez par créer votre première application"
-                  : "Aucune application avec ce statut"}
+                  : "Aucune application avec ces critères de filtrage"}
               </p>
               <Button
                 onClick={() => setIsPopoverOpen(true)}
@@ -924,7 +1154,7 @@ export default function ApplicationPage() {
                   <h3 className="text-xl font-bold">
                     {selectedApplication.name}
                   </h3>
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex flex-wrap gap-2 mt-2">
                     <Badge
                       className={getStatusColor(selectedApplication.status)}
                     >
@@ -933,13 +1163,28 @@ export default function ApplicationPage() {
                         {selectedApplication.status}
                       </div>
                     </Badge>
+                    {selectedApplication.license_type && (
+                      <Badge
+                        variant="outline"
+                        className={getLicenseTypeColor(
+                          selectedApplication.license_type
+                        )}
+                      >
+                        {selectedApplication.license_type}
+                      </Badge>
+                    )}
                     <Badge
                       variant="outline"
-                      className={getLicenseTypeColor(
-                        selectedApplication.license_type
+                      className={getCreationTypeColor(
+                        selectedApplication.created_by
                       )}
                     >
-                      {selectedApplication.license_type}
+                      <div className="flex items-center gap-1">
+                        {getCreationTypeIcon(selectedApplication.created_by)}
+                        {selectedApplication.created_by === "company"
+                          ? "Interne"
+                          : "Externe"}
+                      </div>
                     </Badge>
                   </div>
                 </div>
@@ -961,6 +1206,21 @@ export default function ApplicationPage() {
                         ` / ${selectedApplication.max_users}`}
                     </p>
                   </div>
+                  {selectedApplication.account && (
+                    <div>
+                      <p className="text-sm text-gray-500">Compte associé</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Wallet className="h-4 w-4 text-gray-600" />
+                        <p className="text-lg font-medium">
+                          {selectedApplication.account.name}
+                        </p>
+                        <Badge variant="outline" className="ml-2">
+                          {formatCurrency(selectedApplication.account.balance)}{" "}
+                          {selectedApplication.account.currency}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-4">
                   <div>
@@ -975,6 +1235,14 @@ export default function ApplicationPage() {
                     </p>
                     <p className="text-lg font-medium">
                       {formatDate(selectedApplication.renewal_date)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Type de création</p>
+                    <p className="text-lg font-medium">
+                      {selectedApplication.created_by === "company"
+                        ? "Interne (Créée par l'entreprise)"
+                        : "Externe (Avec licence)"}
                     </p>
                   </div>
                 </div>

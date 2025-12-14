@@ -52,6 +52,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRouter } from "next/navigation";
 
 export default function FacturationPage() {
   const {
@@ -96,6 +97,7 @@ export default function FacturationPage() {
     "invoice_number" | "issue_date" | "total_amount" | "status"
   >("issue_date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const router = useRouter();
 
   // États pour la recherche et les filtres des tiers
   const [thirdPartySearchQuery, setThirdPartySearchQuery] = useState("");
@@ -725,16 +727,6 @@ Référence: FACT-${invoice.invoice_number}`;
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem asChild>
-                                    <Link
-                                      href={`/invoices/${invoice.id}`}
-                                      className="flex items-center"
-                                    >
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      Voir
-                                    </Link>
-                                  </DropdownMenuItem>
-
                                   {/* Option pour visualiser le PDF */}
                                   <DropdownMenuItem
                                     onClick={() => {
@@ -744,6 +736,15 @@ Référence: FACT-${invoice.invoice_number}`;
                                   >
                                     <FileText className="h-4 w-4 mr-2" />
                                     Aperçu PDF
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      router.push(`/invoices/${invoice.id}`);
+                                    }}
+                                  >
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Voir la facture
                                   </DropdownMenuItem>
 
                                   {/* Option pour générer QR Code de paiement */}
@@ -769,16 +770,16 @@ Référence: FACT-${invoice.invoice_number}`;
 
                                   {invoice.type === "client" && (
                                     <>
-                                      {invoice.status === "brouillon" && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            handleSendInvoice(invoice.id)
-                                          }
-                                        >
-                                          <Send className="h-4 w-4 mr-2" />
-                                          Envoyer
-                                        </DropdownMenuItem>
-                                      )}
+                                      {/* {invoice.status === "brouillon" && ( */}
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          handleSendInvoice(invoice.id)
+                                        }
+                                      >
+                                        <Send className="h-4 w-4 mr-2" />
+                                        Envoyer
+                                      </DropdownMenuItem>
+                                      {/* )} */}
                                     </>
                                   )}
 

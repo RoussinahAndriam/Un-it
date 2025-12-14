@@ -147,7 +147,7 @@ const InvoiceDetailPage: NextPage = () => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {invoice.type === "client" && invoice.status === "brouillon" && (
+              {invoice.type === "client" && (
                 <DropdownMenuItem onClick={handleSendInvoice}>
                   <Send className="h-4 w-4 mr-2" />
                   Envoyer par email

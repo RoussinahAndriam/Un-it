@@ -38,6 +38,20 @@ import {
   Banknote,
   Smartphone as MobileIcon,
   AlertCircle,
+  X,
+  Calendar,
+  Tag,
+  MapPin,
+  DollarSign,
+  FileText,
+  User,
+  Building,
+  CheckCircle,
+  AlertTriangle,
+  Settings,
+  RefreshCw,
+  Eye,
+  Clock,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -53,16 +67,20 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatCurrency } from "@/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "Non définie";
-  return new Date(dateString).toLocaleDateString("fr-FR");
+  return new Date(dateString).toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 };
 
 const getStatusColor = (status: AssetStatus) => {
@@ -80,6 +98,36 @@ const getStatusColor = (status: AssetStatus) => {
   }
 };
 
+const getStatusLabel = (status: AssetStatus) => {
+  switch (status) {
+    case "neuf":
+      return "Neuf";
+    case "en_service":
+      return "En service";
+    case "en_maintenance":
+      return "En maintenance";
+    case "hors_service":
+      return "Hors service";
+    default:
+      return status;
+  }
+};
+
+const getStatusIcon = (status: AssetStatus) => {
+  switch (status) {
+    case "neuf":
+      return CheckCircle;
+    case "en_service":
+      return CheckCircle;
+    case "en_maintenance":
+      return Settings;
+    case "hors_service":
+      return AlertTriangle;
+    default:
+      return CheckCircle;
+  }
+};
+
 const getLocationColor = (location: AssetLocation) => {
   switch (location) {
     case "en_stock":
@@ -90,6 +138,32 @@ const getLocationColor = (location: AssetLocation) => {
       return "bg-orange-100 text-orange-800 border-orange-200";
     default:
       return "bg-gray-100 text-gray-800 border-gray-200";
+  }
+};
+
+const getLocationLabel = (location: AssetLocation) => {
+  switch (location) {
+    case "en_stock":
+      return "En stock";
+    case "bureau":
+      return "Au bureau";
+    case "pret_employe":
+      return "Prêté à un employé";
+    default:
+      return location;
+  }
+};
+
+const getLocationIcon = (location: AssetLocation) => {
+  switch (location) {
+    case "en_stock":
+      return Building;
+    case "bureau":
+      return Building;
+    case "pret_employe":
+      return User;
+    default:
+      return MapPin;
   }
 };
 
@@ -167,6 +241,457 @@ const StatCard = ({
   </Card>
 );
 
+// Composant pour afficher les détails d'un actif dans un dialog
+const AssetDetailDialog = ({
+  asset,
+  accounts,
+  onEdit,
+  onDelete,
+  onClose,
+  isOpen,
+}: {
+  asset: any;
+  accounts: any[];
+  onEdit: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+  isOpen: boolean;
+}) => {
+  if (!asset) return null;
+
+  const AssetIcon = getAssetIcon(asset.name);
+  const StatusIcon = getStatusIcon(asset.status);
+  const LocationIcon = getLocationIcon(asset.location);
+  const account = accounts.find((acc) => acc.id === asset.account_id);
+  const AccountIcon = account ? getAccountIcon(account.type) : Wallet;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="w-40xl h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-blue-50 rounded-xl">
+                <AssetIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <DialogTitle className="text-2xl font-bold">
+                  {asset.name}
+                </DialogTitle>
+                <DialogDescription className="text-gray-600">
+                  ID: {asset.id} • Créé le {formatDate(asset.created_at)}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="grid grid-cols-1  gap-6">
+          {/* Section gauche : Informations principales */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Statut et Localisation */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 bg-purple-50 rounded-lg">
+                      <LocationIcon className="h-5 w-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Localisation
+                      </p>
+                    </div>
+                  </div>
+                  <Badge className={getLocationColor(asset.location)}>
+                    {getLocationLabel(asset.location)}
+                  </Badge>
+                  <div>
+                    <Badge className={getStatusColor(asset.status)}>
+                      {getStatusLabel(asset.status)}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
+              {/* Description */}
+              {asset.description && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <FileText className="h-5 w-5" />
+                      Description
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 whitespace-pre-line">
+                      {asset.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {/* Informations financières */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="items-center gap-4 text-lg">
+                  <DollarSign className="h-5 w-5" />
+                  Informations financières
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Valeur d'acquisition
+                      </p>
+                      <p className="text-2xl font-bold text-blue-700">
+                        {formatCurrency(asset.acquisition_value || 0)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Date d'acquisition
+                      </p>
+                      <p className="text-lg font-semibold">
+                        {formatDate(asset.acquisition_date)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Informations techniques */}
+            <Card>
+              <CardHeader>
+                <CardTitle className=" items-center gap-4 text-lg">
+                  <Settings className="h-5 w-5" />
+                  Informations techniques
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {asset.serial_number && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">
+                      Numéro de série
+                    </p>
+                    <p className="font-mono bg-gray-50 p-2 rounded-md mt-1">
+                      {asset.serial_number}
+                    </p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm font-medium text-gray-600">
+                    Date de création
+                  </p>
+                  <p className="font-medium">{formatDate(asset.created_at)}</p>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium text-gray-600">
+                    Dernière mise à jour
+                  </p>
+                  <p className="font-medium">{formatDate(asset.updated_at)}</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <RefreshCw className="h-5 w-5" />
+                  Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button
+                  onClick={onEdit}
+                  className="w-full justify-start gap-2   text-blue-600"
+                  variant="outline"
+                >
+                  <Edit className="h-4 w-4" />
+                  Modifier
+                </Button>
+                <Button
+                  onClick={onDelete}
+                  className="w-full justify-start gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer
+                </Button>
+                <Separator />
+                <div className="text-xs text-gray-500 pt-2">
+                  <p>
+                    Cliquez sur modifier pour mettre à jour les informations
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Fermer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+// Dialog pour créer/modifier un actif
+const AssetFormDialog = ({
+  isOpen,
+  onOpenChange,
+  isEditMode,
+  selectedAsset,
+  formData,
+  setFormData,
+  accounts,
+  loadingAccounts,
+  balanceError,
+  submitting,
+  handleSubmit,
+  resetForm,
+}: any) => {
+  const getAccountInfo = (accountId: number | null | undefined) => {
+    if (!accountId) return null;
+    return accounts.find((acc) => acc.id === accountId);
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            {isEditMode ? "Modifier l'Actif" : "Nouvel Actif Matériel"}
+          </DialogTitle>
+          <DialogDescription>
+            {isEditMode
+              ? "Modifiez les détails de cet actif matériel"
+              : "Ajoutez un nouveau matériel à l'inventaire"}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Nom de l'actif *</Label>
+              <Input
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData((prev: any) => ({
+                    ...prev,
+                    name: e.target.value,
+                  }))
+                }
+                placeholder="ex: Ordinateur Portable Dell"
+                required
+              />
+            </div>
+            <div>
+              <Label>Numéro de série</Label>
+              <Input
+                value={formData.serial_number || ""}
+                onChange={(e) =>
+                  setFormData((prev: any) => ({
+                    ...prev,
+                    serial_number: e.target.value,
+                  }))
+                }
+                placeholder="Optionnel"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Description</Label>
+            <Textarea
+              value={formData.description || ""}
+              onChange={(e) =>
+                setFormData((prev: any) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
+              placeholder="Description détaillée de l'actif..."
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Date d'acquisition</Label>
+              <Input
+                type="date"
+                value={formData.acquisition_date || ""}
+                onChange={(e) =>
+                  setFormData((prev: any) => ({
+                    ...prev,
+                    acquisition_date: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div>
+              <Label>Valeur d'acquisition (MGA)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.acquisition_value || ""}
+                onChange={(e) =>
+                  setFormData((prev: any) => ({
+                    ...prev,
+                    acquisition_value: e.target.value
+                      ? parseFloat(e.target.value)
+                      : 0,
+                  }))
+                }
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Statut *</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value: AssetStatus) =>
+                  setFormData((prev: any) => ({ ...prev, status: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="neuf">Neuf</SelectItem>
+                  <SelectItem value="en_service">En service</SelectItem>
+                  <SelectItem value="en_maintenance">En maintenance</SelectItem>
+                  <SelectItem value="hors_service">Hors service</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Localisation *</Label>
+              <Select
+                value={formData.location}
+                onValueChange={(value: AssetLocation) =>
+                  setFormData((prev: any) => ({ ...prev, location: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="en_stock">En stock</SelectItem>
+                  <SelectItem value="bureau">Au bureau</SelectItem>
+                  <SelectItem value="pret_employe">
+                    Prêté à un employé
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label>Compte de financement</Label>
+            <Select
+              value={formData.account_id?.toString() || "none"}
+              onValueChange={(value) =>
+                setFormData((prev: any) => ({
+                  ...prev,
+                  account_id: value === "none" ? undefined : parseInt(value),
+                }))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionnez un compte" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucun compte</SelectItem>
+                {loadingAccounts ? (
+                  <SelectItem value="loading" disabled>
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Chargement des comptes...
+                    </div>
+                  </SelectItem>
+                ) : (
+                  accounts.map((account: any) => {
+                    const AccountIcon = getAccountIcon(account.type);
+                    return (
+                      <SelectItem
+                        key={account.id}
+                        value={account.id.toString()}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2">
+                            <AccountIcon className="h-4 w-4" />
+                            <span>{account.name}</span>
+                          </div>
+                          <span className="text-sm text-gray-500">
+                            {formatBalance(account.balance, account.currency)}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })
+                )}
+              </SelectContent>
+            </Select>
+
+            {balanceError && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{balanceError}</AlertDescription>
+              </Alert>
+            )}
+
+            {formData.account_id && !balanceError && (
+              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">Solde disponible:</span>
+                  <span className="font-bold">
+                    {formatBalance(
+                      getAccountInfo(formData.account_id)?.balance || 0,
+                      getAccountInfo(formData.account_id)?.currency || "MGA"
+                    )}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={resetForm}>
+              Annuler
+            </Button>
+            <Button
+              type="submit"
+              disabled={submitting || !!balanceError}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {submitting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isEditMode ? (
+                "Modifier"
+              ) : (
+                "Créer"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 export default function AssetsPage() {
   const {
     assets,
@@ -184,7 +709,8 @@ export default function AssetsPage() {
   } = useAsset();
 
   const [activeTab, setActiveTab] = useState<AssetStatus | "all">("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -251,7 +777,7 @@ export default function AssetsPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-     console.log("Form data being submitted:", formData);
+    console.log("Form data being submitted:", formData);
 
     if (balanceError) {
       alert("Veuillez vérifier le solde du compte sélectionné");
@@ -263,13 +789,14 @@ export default function AssetsPage() {
 
     try {
       if (isEditMode && selectedAsset) {
-              console.log("Updating asset:", selectedAsset.id, formData); 
+        console.log("Updating asset:", selectedAsset.id, formData);
         await updateAsset(selectedAsset.id, formData);
       } else {
         await createAsset(formData);
       }
       resetForm();
-      setIsDialogOpen(false);
+      setIsFormDialogOpen(false);
+      setIsDetailDialogOpen(false);
     } catch (err: any) {
       console.error("Erreur:", err);
     } finally {
@@ -293,6 +820,44 @@ export default function AssetsPage() {
     setBalanceError(null);
   };
 
+  const handleCardClick = (asset: any) => {
+    console.log("Card clicked:", asset);
+    setSelectedAsset(asset);
+    setIsDetailDialogOpen(true);
+  };
+
+  const handleEditFromDetail = () => {
+    if (selectedAsset) {
+      console.log("Editing from detail:", selectedAsset);
+      setFormData({
+        name: selectedAsset.name,
+        description: selectedAsset.description || "",
+        serial_number: selectedAsset.serial_number || "",
+        acquisition_date: selectedAsset.acquisition_date || "",
+        acquisition_value: selectedAsset.acquisition_value || 0,
+        status: selectedAsset.status,
+        location: selectedAsset.location,
+        account_id: selectedAsset.account_id || undefined,
+      });
+      setIsEditMode(true);
+      setIsDetailDialogOpen(false);
+      setIsFormDialogOpen(true);
+    }
+  };
+
+  const handleDeleteFromDetail = () => {
+    if (selectedAsset) {
+      if (
+        window.confirm(
+          `Êtes-vous sûr de vouloir supprimer l'actif "${selectedAsset.name}" ? Cette action est irréversible.`
+        )
+      ) {
+        deleteAsset(selectedAsset.id);
+        setIsDetailDialogOpen(false);
+      }
+    }
+  };
+
   const getAccountInfo = (accountId: number | null | undefined) => {
     if (!accountId) return null;
     return accounts.find((acc) => acc.id === accountId);
@@ -311,246 +876,47 @@ export default function AssetsPage() {
         </div>
 
         <div className="flex gap-2">
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white">
-                <Plus className="h-4 w-4" />
-                Nouvel Actif
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {isEditMode ? "Modifier l'Actif" : "Nouvel Actif Matériel"}
-                </DialogTitle>
-                <DialogDescription>
-                  {isEditMode
-                    ? "Modifiez les détails de cet actif matériel"
-                    : "Ajoutez un nouveau matériel à l'inventaire"}
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Nom de l'actif *</Label>
-                    <Input
-                      value={formData.name}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          name: e.target.value,
-                        }))
-                      }
-                      placeholder="ex: Ordinateur Portable Dell"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label>Numéro de série</Label>
-                    <Input
-                      value={formData.serial_number || ""}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          serial_number: e.target.value,
-                        }))
-                      }
-                      placeholder="Optionnel"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.description || ""}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        description: e.target.value,
-                      }))
-                    }
-                    placeholder="Description détaillée de l'actif..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Date d'acquisition</Label>
-                    <Input
-                      type="date"
-                      value={formData.acquisition_date || ""}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          acquisition_date: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label>Valeur d'acquisition (MGA)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={formData.acquisition_value || ""}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          acquisition_value: e.target.value
-                            ? parseFloat(e.target.value)
-                            : 0,
-                        }))
-                      }
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Statut *</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value: AssetStatus) =>
-                        setFormData((prev) => ({ ...prev, status: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="neuf">Neuf</SelectItem>
-                        <SelectItem value="en_service">En service</SelectItem>
-                        <SelectItem value="en_maintenance">
-                          En maintenance
-                        </SelectItem>
-                        <SelectItem value="hors_service">
-                          Hors service
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Localisation *</Label>
-                    <Select
-                      value={formData.location}
-                      onValueChange={(value: AssetLocation) =>
-                        setFormData((prev) => ({ ...prev, location: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="en_stock">En stock</SelectItem>
-                        <SelectItem value="bureau">Au bureau</SelectItem>
-                        <SelectItem value="pret_employe">
-                          Prêté à un employé
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Compte de financement</Label>
-                  <Select
-                    value={formData.account_id?.toString() || "none"}
-                    onValueChange={(value) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        account_id:
-                          value === "none" ? undefined : parseInt(value),
-                      }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionnez un compte" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Aucun compte</SelectItem>
-                      {loadingAccounts ? (
-                        <SelectItem value="loading" disabled>
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Chargement des comptes...
-                          </div>
-                        </SelectItem>
-                      ) : (
-                        accounts.map((account) => {
-                          const AccountIcon = getAccountIcon(account.type);
-                          return (
-                            <SelectItem
-                              key={account.id}
-                              value={account.id.toString()}
-                            >
-                              <div className="flex items-center justify-between w-full">
-                                <div className="flex items-center gap-2">
-                                  <AccountIcon className="h-4 w-4" />
-                                  <span>{account.name}</span>
-                                </div>
-                                <span className="text-sm text-gray-500">
-                                  {formatBalance(
-                                    account.balance,
-                                    account.currency
-                                  )}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          );
-                        })
-                      )}
-                    </SelectContent>
-                  </Select>
-
-                  {balanceError && (
-                    <Alert variant="destructive" className="mt-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>{balanceError}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  {formData.account_id && !balanceError && (
-                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium">Solde disponible:</span>
-                        <span className="font-bold">
-                          {formatBalance(
-                            getAccountInfo(formData.account_id)?.balance || 0,
-                            getAccountInfo(formData.account_id)?.currency ||
-                              "MGA"
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={resetForm}>
-                    Annuler
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={submitting || !!balanceError}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {submitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : isEditMode ? (
-                      "Modifier"
-                    ) : (
-                      "Créer"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button
+            onClick={() => {
+              resetForm();
+              setIsFormDialogOpen(true);
+            }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Plus className="h-4 w-4" />
+            Nouvel Actif
+          </Button>
         </div>
       </div>
+
+      {/* Dialog pour créer/modifier */}
+      <AssetFormDialog
+        isOpen={isFormDialogOpen}
+        onOpenChange={setIsFormDialogOpen}
+        isEditMode={isEditMode}
+        selectedAsset={selectedAsset}
+        formData={formData}
+        setFormData={setFormData}
+        accounts={accounts}
+        loadingAccounts={loadingAccounts}
+        balanceError={balanceError}
+        submitting={submitting}
+        handleSubmit={handleSubmit}
+        resetForm={() => {
+          resetForm();
+          setIsFormDialogOpen(false);
+        }}
+      />
+
+      {/* Dialog pour afficher les détails */}
+      <AssetDetailDialog
+        asset={selectedAsset}
+        accounts={accounts}
+        onEdit={handleEditFromDetail}
+        onDelete={handleDeleteFromDetail}
+        onClose={() => setIsDetailDialogOpen(false)}
+        isOpen={isDetailDialogOpen}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
         <StatCard
@@ -642,6 +1008,7 @@ export default function AssetsPage() {
         </div>
       </div>
 
+      {/* Grille des cartes d'actifs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
           [...Array(6)].map((_, i) => (
@@ -671,31 +1038,33 @@ export default function AssetsPage() {
             return (
               <Card
                 key={asset.id}
-                className="hover:shadow-md transition-shadow"
+                className="hover:shadow-md transition-shadow cursor-pointer group hover:border-blue-300"
+                onClick={() => handleCardClick(asset)}
               >
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 rounded-lg">
+                      <div className="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors">
                         <AssetIcon className="h-5 w-5 text-blue-600" />
                       </div>
                       <div>
-                        <CardTitle className="text-lg font-semibold">
+                        <CardTitle className="text-lg font-semibold group-hover:text-blue-700 transition-colors">
                           {asset.name}
                         </CardTitle>
                         <div className="flex gap-2 mt-1">
                           <Badge className={getStatusColor(asset.status)}>
-                            {asset.status}
+                            {getStatusLabel(asset.status)}
                           </Badge>
                           <Badge
                             variant="outline"
                             className={getLocationColor(asset.location)}
                           >
-                            {asset.location}
+                            {getLocationLabel(asset.location)}
                           </Badge>
                         </div>
                       </div>
                     </div>
+                    <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </CardHeader>
 
@@ -743,13 +1112,33 @@ export default function AssetsPage() {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                          }}
+                        >
                           <Filter className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent
+                        align="end"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <DropdownMenuItem
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCardClick(asset);
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Voir les détails
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedAsset(asset);
                             setFormData({
                               name: asset.name,
@@ -762,7 +1151,7 @@ export default function AssetsPage() {
                               account_id: asset.account_id || undefined,
                             });
                             setIsEditMode(true);
-                            setIsDialogOpen(true);
+                            setIsFormDialogOpen(true);
                           }}
                         >
                           <Edit className="h-4 w-4 mr-2" />
@@ -770,9 +1159,10 @@ export default function AssetsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (
-                              confirm(
+                              window.confirm(
                                 "Êtes-vous sûr de vouloir supprimer cet actif ?"
                               )
                             ) {
@@ -803,7 +1193,7 @@ export default function AssetsPage() {
                     ? "Aucun actif ne correspond à vos critères"
                     : "Commencez par enregistrer votre premier actif matériel"}
                 </p>
-                <Button onClick={() => setIsDialogOpen(true)}>
+                <Button onClick={() => setIsFormDialogOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Nouvel Actif
                 </Button>

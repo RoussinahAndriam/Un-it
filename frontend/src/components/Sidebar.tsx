@@ -24,13 +24,10 @@ import {
 import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 
-// Dans votre composant de navigation
 const menuSections = [
   {
     name: "Général",
-    items: [
-      { name: "Tableau de Bord", href: "/", icon: Home }
-    ],
+    items: [{ name: "Tableau de Bord", href: "/", icon: Home }],
   },
   {
     name: "Finances",
@@ -38,7 +35,11 @@ const menuSections = [
       { name: "Comptes", href: "/accounts", icon: Wallet },
       { name: "Revenus & Dépenses", href: "/transactions", icon: TrendingUp },
       { name: "Catégories", href: "/transaction-categories", icon: FolderTree },
-      { name: "Dépenses Fixes & Revenus Récurrents", href: "/recurring-operations", icon: CalendarRange },
+      {
+        name: "Dépenses Fixes & Revenus Récurrents",
+        href: "/recurring-operations",
+        icon: CalendarRange,
+      },
       { name: "Facturation", href: "/invoices", icon: FileText },
     ],
   },
@@ -51,19 +52,17 @@ const menuSections = [
   },
   {
     name: "Analytique",
-    items: [
-      { name: "Rapports", href: "/rapport", icon: BarChart }
-    ],
+    items: [{ name: "Rapports", href: "/rapport", icon: BarChart }],
   },
   {
     name: "Système",
     items: [
       { name: "Applications UN-IT", href: "/applications", icon: AppWindow },
       { name: "Administration", href: "/Admindashboard", icon: Settings },
-      // { name: "Auth", href: "/auth", icon: User },
     ],
   },
 ];
+
 interface MenuSectionProps {
   section: {
     name: string;
@@ -79,7 +78,6 @@ interface MenuSectionProps {
 
 const MenuSection = ({ section, pathname, isCollapsed }: MenuSectionProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  // const { user } = useAuth();
 
   if (isCollapsed) {
     return (
@@ -105,7 +103,6 @@ const MenuSection = ({ section, pathname, isCollapsed }: MenuSectionProps) => {
               title={item.name}
             >
               <Icon className="h-5 w-5" />
-              {/* Tooltip en mode collapsed */}
               <span className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
                 {item.name}
               </span>
@@ -138,7 +135,6 @@ const MenuSection = ({ section, pathname, isCollapsed }: MenuSectionProps) => {
               item.href === "/"
                 ? pathname === "/"
                 : pathname.startsWith(item.href);
-
 
             return (
               <Link
@@ -174,18 +170,28 @@ export default function Sidebar() {
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { user, logout } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const handleLogout = async () => {
     try {
-      await logout()
+      await logout();
+      setShowLogoutConfirm(false);
     } catch (error) {
-      console.error(error);
+      console.error("Erreur lors de la déconnexion:", error);
     }
-  }
+  };
+
+  const handleLogoutClick = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false);
+  };
 
   return (
     <>
-      {/* Overlay pour mobile - CORRIGÉ : s'affiche quand la sidebar est OUVERTE sur mobile */}
+      {/* Overlay pour mobile */}
       {!isCollapsed && (
         <div
           className="fixed inset-0 bg-black/20 z-40 lg:hidden"
@@ -193,14 +199,83 @@ export default function Sidebar() {
         />
       )}
 
+      {/* Modal de confirmation de déconnexion */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full">
+            <div className="text-center">
+              {/* Icône d'alerte */}
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg
+                  className="h-6 w-6 text-red-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.732 16.5c-.77.833.192 2.5 1.732 2.5z"
+                  />
+                </svg>
+              </div>
+
+              {/* Titre et message */}
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Confirmer la déconnexion
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Êtes-vous sûr de vouloir vous déconnecter de votre compte ?
+              </p>
+
+              {/* Boutons d'action */}
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelLogout}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors duration-200"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors duration-200 flex items-center justify-center gap-2"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                  Se déconnecter
+                </button>
+              </div>
+
+              {/* Message d'information */}
+              <p className="text-xs text-gray-500 mt-4">
+                Vous pourrez vous reconnecter à tout moment.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sidebar principale */}
       <aside
         className={`
-        fixed lg:sticky top-0 h-screen // ← MODIFICATION IMPORTANTE
+        fixed lg:sticky top-0 h-screen
         bg-white border-r border-gray-200/60
         flex flex-col
         transition-all duration-300 ease-in-out
         shadow-xl lg:shadow-sm
-        overflow-y-auto // ← Scroll indépendant pour la sidebar
+        overflow-y-auto
         z-50
         ${isCollapsed ? "w-20" : "w-80"}
         ${isCollapsed ? "-translate-x-full lg:translate-x-0" : "translate-x-0"}
@@ -257,8 +332,8 @@ export default function Sidebar() {
         </div>
 
         {/* Navigation avec scroll indépendant */}
-        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto sidebar-scroll">
-          {menuSections.map((section, index) => (
+        <nav className="flex-1 px-4 py-6 space-y-6 overflow-y-auto">
+          {menuSections.map((section) => (
             <MenuSection
               key={section.name}
               section={section}
@@ -268,46 +343,75 @@ export default function Sidebar() {
           ))}
         </nav>
 
-        {/* Footer/Bottom Section */}
+        {/* Footer/Bottom Section avec bouton de déconnexion */}
         <div
           className={`flex-shrink-0 p-4 border-t border-gray-200/60 ${
             isCollapsed ? "px-3" : "px-4"
           }`}
         >
-          <div
-          onClick={handleLogout}
-            className={`flex items-center ${
+          <button
+            onClick={handleLogoutClick}
+            className={`w-full flex items-center ${
               isCollapsed ? "justify-center" : "justify-between"
-            }`}
+            } p-2 rounded-lg hover:bg-gray-50 transition-colors duration-200 group`}
           >
-            {!isCollapsed && (
-              <div className="flex items-center space-x-3">
+            {!isCollapsed ? (
+              <>
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                    <User className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <span className="text-sm font-medium text-gray-900">
+                      {user?.name || "Utilisateur"}
+                    </span>
+                    <span className="text-xs text-gray-500">Connecté</span>
+                  </div>
+                </div>
+                {/* Icône de déconnexion subtile */}
+                <div className="text-gray-400 group-hover:text-gray-600 transition-colors">
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                </div>
+              </>
+            ) : (
+              <div className="relative">
                 <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
                   <User className="h-4 w-4 text-white" />
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-900">
-                    {user?.name} 
-                  </span>
-                  <span className="text-xs text-gray-500">Connecté</span>
-                </div>
+                {/* Tooltip en mode collapsed */}
+                <span className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 top-1/2 transform -translate-y-1/2">
+                  Se déconnecter
+                </span>
               </div>
             )}
+          </button>
 
-            {isCollapsed && (
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                <User className="h-4 w-4 text-white" />
-              </div>
-            )}
-          </div>
+          {/* Info supplémentaire en mode non-collapsed */}
+          {!isCollapsed && (
+            <p className="text-xs text-gray-500 mt-2 px-2">
+              Cliquez pour vous déconnecter
+            </p>
+          )}
         </div>
       </aside>
 
-      {/* Mobile menu button - CORRIGÉ : s'affiche seulement quand la sidebar est fermée sur mobile */}
+      {/* Mobile menu button */}
       {isCollapsed && (
         <button
           onClick={() => setIsCollapsed(false)}
-          className="fixed bottom-4 left-4 z-40 lg:hidden w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center"
+          className="fixed bottom-4 left-4 z-40 lg:hidden w-12 h-12 bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors"
         >
           <ChevronRight className="h-5 w-5" />
         </button>

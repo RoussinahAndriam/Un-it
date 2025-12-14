@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useEffect, FormEvent, ChangeEvent, useMemo } from "react";
-import { useAccount, AccountType, CreateAccountData, Account } from "@/hooks/useAccount";
+import {
+  useAccount,
+  AccountType,
+  CreateAccountData,
+  Account,
+} from "@/hooks/useAccount";
 import {
   Popover,
   PopoverContent,
@@ -151,7 +156,6 @@ export default function AccountPage() {
       resetForm();
       setIsPopoverOpen(false);
     } catch (err) {
-      // L'erreur est déjà gérée dans le hook
       console.error("Erreur lors de l'opération :", err);
     } finally {
       setSubmitting(false);
@@ -159,6 +163,12 @@ export default function AccountPage() {
   };
 
   const handleViewDetails = (account: Account) => {
+    setSelectedAccount(account);
+    setIsDetailsModalOpen(true);
+  };
+
+  // Fonction pour gérer le clic sur une carte
+  const handleCardClick = (account: Account) => {
     setSelectedAccount(account);
     setIsDetailsModalOpen(true);
   };
@@ -197,6 +207,27 @@ export default function AccountPage() {
     }
   };
 
+  // Fonction pour supprimer depuis le modal de détails
+  const handleDeleteFromDetails = async (account: Account) => {
+    if (
+      confirm(
+        "Êtes-vous sûr de vouloir supprimer ce compte ? Cette action est irréversible."
+      )
+    ) {
+      setDeleting(true);
+      clearError();
+      try {
+        await deleteAccount(account.id);
+        setIsDetailsModalOpen(false);
+        setSelectedAccount(null);
+      } catch (err) {
+        console.error("Erreur lors de la suppression :", err);
+      } finally {
+        setDeleting(false);
+      }
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -221,7 +252,9 @@ export default function AccountPage() {
   // Filtrage et tri des comptes
   const filteredAndSortedAccounts = useMemo(() => {
     let filtered = accounts.filter((account) => {
-      const matchesSearch = account.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = account.name
+        .toLowerCase()
+        .includes(searchQuery.toLowerCase());
       const matchesType = typeFilter === "all" || account.type === typeFilter;
       return matchesSearch && matchesType;
     });
@@ -250,11 +283,11 @@ export default function AccountPage() {
       }
 
       if (typeof aValue === "string" && typeof bValue === "string") {
-        return sortOrder === "asc" 
+        return sortOrder === "asc"
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
       } else {
-        return sortOrder === "asc" 
+        return sortOrder === "asc"
           ? (aValue as number) - (bValue as number)
           : (bValue as number) - (aValue as number);
       }
@@ -269,15 +302,14 @@ export default function AccountPage() {
   const accountTypes = new Set(accounts.map((acc) => acc.type)).size;
 
   // Statistiques filtrées
-const filteredTotalBalance = useMemo(() => {
-  return filteredAndSortedAccounts.reduce((sum, account) => {
-    const raw = String(account.balance ?? "0").replace(/[^\d.-]/g, "");
-    const balance = Number(raw);
+  const filteredTotalBalance = useMemo(() => {
+    return filteredAndSortedAccounts.reduce((sum, account) => {
+      const raw = String(account.balance ?? "0").replace(/[^\d.-]/g, "");
+      const balance = Number(raw);
 
-    return sum + (isNaN(balance) ? 0 : balance);
-  }, 0);
-}, [filteredAndSortedAccounts]);
-
+      return sum + (isNaN(balance) ? 0 : balance);
+    }, 0);
+  }, [filteredAndSortedAccounts]);
 
   const filteredAccountCount = filteredAndSortedAccounts.length;
 
@@ -362,20 +394,17 @@ const filteredTotalBalance = useMemo(() => {
               Nouveau Compte
             </Button>
           </DialogTrigger>
-          <DialogContent className="w-96 p-6 bg-white shadow-xl rounded-xl border-0 ">
-             <DialogHeader>
-                            <DialogTitle>
-                              {isEditMode
-                                ? "Modifier du compte"
-                                : "Nouveau compte"}
-                            </DialogTitle>
-                            <DialogDescription>
-                              {isEditMode
-                                ? "Modifiez les détails du compte"
-                                : "Ajoutez un nouveau compte à votre journal"}
-                            </DialogDescription>
-               </DialogHeader>
-           
+          <DialogContent className="w-96 p-6 bg-white shadow-xl rounded-xl border-0">
+            <DialogHeader>
+              <DialogTitle>
+                {isEditMode ? "Modifier du compte" : "Nouveau compte"}
+              </DialogTitle>
+              <DialogDescription>
+                {isEditMode
+                  ? "Modifiez les détails du compte"
+                  : "Ajoutez un nouveau compte à votre journal"}
+              </DialogDescription>
+            </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -518,7 +547,12 @@ const filteredTotalBalance = useMemo(() => {
               {/* Filtre par type */}
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-500" />
-                <Select value={typeFilter} onValueChange={(value: AccountType | "all") => setTypeFilter(value)}>
+                <Select
+                  value={typeFilter}
+                  onValueChange={(value: AccountType | "all") =>
+                    setTypeFilter(value)
+                  }
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Type de compte" />
                   </SelectTrigger>
@@ -534,8 +568,15 @@ const filteredTotalBalance = useMemo(() => {
 
               {/* Tri */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600 whitespace-nowrap">Trier par:</span>
-                <Select value={sortBy} onValueChange={(value: "name" | "balance" | "type") => setSortBy(value)}>
+                <span className="text-sm text-gray-600 whitespace-nowrap">
+                  Trier par:
+                </span>
+                <Select
+                  value={sortBy}
+                  onValueChange={(value: "name" | "balance" | "type") =>
+                    setSortBy(value)
+                  }
+                >
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
@@ -545,11 +586,13 @@ const filteredTotalBalance = useMemo(() => {
                     <SelectItem value="type">Type</SelectItem>
                   </SelectContent>
                 </Select>
-                
+
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                  onClick={() =>
+                    setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                  }
                   className="h-10 w-10"
                 >
                   {sortOrder === "asc" ? "A→Z" : "Z→A"}
@@ -572,11 +615,12 @@ const filteredTotalBalance = useMemo(() => {
           {/* Résultats du filtrage */}
           <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-600">
             <span>
-              {filteredAccountCount} compte{filteredAccountCount > 1 ? "s" : ""} trouvé{filteredAccountCount > 1 ? "s" : ""}
+              {filteredAccountCount} compte{filteredAccountCount > 1 ? "s" : ""}{" "}
+              trouvé{filteredAccountCount > 1 ? "s" : ""}
               {searchQuery && ` pour "${searchQuery}"`}
               {typeFilter !== "all" && ` • Type: ${typeFilter}`}
             </span>
-            
+
             {filteredAccountCount > 0 && (
               <span className="text-green-600 font-medium">
                 Solde filtré: {formatCurrency(filteredTotalBalance)}
@@ -591,7 +635,9 @@ const filteredTotalBalance = useMemo(() => {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">Mes Comptes</h2>
           <span className="text-sm text-gray-500">
-            {filteredAndSortedAccounts.length} compte{filteredAndSortedAccounts.length > 1 ? "s" : ""} affiché{filteredAndSortedAccounts.length > 1 ? "s" : ""}
+            {filteredAndSortedAccounts.length} compte
+            {filteredAndSortedAccounts.length > 1 ? "s" : ""} affiché
+            {filteredAndSortedAccounts.length > 1 ? "s" : ""}
           </span>
         </div>
 
@@ -628,6 +674,7 @@ const filteredTotalBalance = useMemo(() => {
                     ? "opacity-50 pointer-events-none"
                     : ""
                 }`}
+                onClick={() => handleCardClick(account)}
               >
                 <CardHeader className="pb-3">
                   <div className="flex justify-between items-start">
@@ -684,17 +731,11 @@ const filteredTotalBalance = useMemo(() => {
                     )}
                   </div>
 
-                  <div className="flex justify-between items-center pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center gap-2"
-                      onClick={() => handleViewDetails(account)}
-                      disabled={editingAccountId === account.id || deleting}
-                    >
-                      <Eye size={16} />
-                      Détails
-                    </Button>
+                  <div
+                    className="flex justify-between items-center pt-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                   
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -747,10 +788,12 @@ const filteredTotalBalance = useMemo(() => {
             <CardContent>
               <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {accounts.length === 0 ? "Aucun compte trouvé" : "Aucun résultat"}
+                {accounts.length === 0
+                  ? "Aucun compte trouvé"
+                  : "Aucun résultat"}
               </h3>
               <p className="text-gray-500 mb-4">
-                {accounts.length === 0 
+                {accounts.length === 0
                   ? "Commencez par créer votre premier compte financier"
                   : "Aucun compte ne correspond à vos critères de recherche"}
               </p>
@@ -770,7 +813,9 @@ const filteredTotalBalance = useMemo(() => {
                 ) : (
                   <Plus size={18} className="mr-2" />
                 )}
-                {accounts.length === 0 ? "Créer un compte" : "Réinitialiser les filtres"}
+                {accounts.length === 0
+                  ? "Créer un compte"
+                  : "Réinitialiser les filtres"}
               </Button>
             </CardContent>
           </Card>
@@ -783,7 +828,7 @@ const filteredTotalBalance = useMemo(() => {
           <DialogHeader>
             <DialogTitle>Confirmer la suppression</DialogTitle>
             <DialogDescription>
-              Êtes-vous sûr de vouloir supprimer le compte
+              Êtes-vous sûr de vouloir supprimer le compte{" "}
               {accountToDelete?.name} ? Cette action est irréversible.
             </DialogDescription>
           </DialogHeader>
@@ -815,50 +860,142 @@ const filteredTotalBalance = useMemo(() => {
 
       {/* Modal de détails */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Détails du compte</DialogTitle>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Détails du compte</DialogTitle>
+                <DialogDescription>
+                  Informations complètes sur ce compte financier
+                </DialogDescription>
+              </div>
+             
+            </div>
           </DialogHeader>
+
           {selectedAccount && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {getAccountTypeIcon(selectedAccount.type)}
-                <div>
-                  <h3 className="text-lg font-semibold">
-                    {selectedAccount.name}
-                  </h3>
-                  <Badge className={getAccountTypeColor(selectedAccount.type)}>
-                    {selectedAccount.type}
-                  </Badge>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Informations principales */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Informations du compte
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          {getAccountTypeIcon(selectedAccount.type)}
+                          <div>
+                            <p className="font-semibold text-lg">
+                              {selectedAccount.name}
+                            </p>
+                            <Badge
+                              className={getAccountTypeColor(
+                                selectedAccount.type
+                              )}
+                            >
+                              {selectedAccount.type}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Solde
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <p className="text-2xl font-bold text-blue-700">
+                          {formatCurrency(
+                            selectedAccount.balance,
+                            selectedAccount.currency
+                          )}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Solde actuel
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Informations supplémentaires */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Devise
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-medium">
+                            {selectedAccount.currency}
+                          </span>
+                          <Badge variant="outline">Devise</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Statut
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <Badge
+                            variant="outline"
+                            className="bg-green-50 text-green-700 border-green-200"
+                          >
+                            Actif
+                          </Badge>
+                          {selectedAccount.created_at && (
+                            <span className="text-xs text-gray-500">
+                              Créé le{" "}
+                              {new Date(
+                                selectedAccount.created_at
+                              ).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Solde</p>
-                  <p className="text-xl font-bold text-blue-700">
-                    {formatCurrency(
-                      selectedAccount.balance,
-                      selectedAccount.currency
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Devise</p>
-                  <p className="text-lg font-medium">
-                    {selectedAccount.currency}
-                  </p>
-                </div>
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  className="flex-1"
+                  onClick={() => {
+                    setIsDetailsModalOpen(false);
+                    handleEdit(selectedAccount);
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Modifier
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border-red-200"
+                  onClick={() => handleDeleteFromDetails(selectedAccount)}
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Supprimer
+                </Button>
+                
               </div>
-
-              {selectedAccount.created_at && (
-                <div>
-                  <p className="text-sm text-gray-500">Date de création</p>
-                  <p>
-                    {new Date(selectedAccount.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </DialogContent>

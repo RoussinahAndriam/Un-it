@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent } from "react";
 import {
   useAssetLoan,
   LoanStatus,
@@ -32,6 +32,9 @@ import {
   Trash2,
   CheckCircle,
   UserPlus,
+  Undo2,
+  Trash,
+  X,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -68,6 +71,199 @@ const isOverdue = (dueDate: string | null) => {
   return new Date(dueDate) < new Date();
 };
 
+// Composant de signature numérique
+const SignaturePad = ({
+  onSave,
+  onClear,
+  value,
+  onChange,
+}: {
+  onSave: (signature: string) => void;
+  onClear: () => void;
+  value: string;
+  onChange: (value: string) => void;
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [isEmpty, setIsEmpty] = useState(true);
+  const [ctx, setCtx] = useState<CanvasRenderingContext2D | null>(null);
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+      if (context) {
+        setCtx(context);
+        setupCanvas(context, canvas);
+
+        // Charger la signature existante si elle existe
+        if (value) {
+          loadSignature(value);
+        }
+      }
+    }
+  }, [value]);
+
+  const setupCanvas = (
+    context: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement
+  ) => {
+    context.lineWidth = 2;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#000000";
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const loadSignature = (signatureData: string) => {
+    if (canvasRef.current && ctx && signatureData) {
+      const image = new Image();
+      image.onload = () => {
+        ctx.clearRect(
+          0,
+          0,
+          canvasRef.current!.width,
+          canvasRef.current!.height
+        );
+        ctx.drawImage(image, 0, 0);
+        setIsEmpty(false);
+      };
+      image.src = signatureData;
+    }
+  };
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!ctx || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
+    setIsEmpty(false);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !ctx || !canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (!ctx) return;
+    ctx.closePath();
+    setIsDrawing(false);
+
+    // Sauvegarder automatiquement
+    saveSignature();
+  };
+
+  const saveSignature = () => {
+    if (canvasRef.current && !isEmpty) {
+      const signatureData = canvasRef.current.toDataURL("image/png");
+      onChange(signatureData);
+      onSave(signatureData);
+    }
+  };
+
+  const clearSignature = () => {
+    if (ctx && canvasRef.current) {
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      setIsEmpty(true);
+      onChange("");
+      onClear();
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="border rounded-lg p-4 bg-white">
+        <canvas
+          ref={canvasRef}
+          width={500}
+          height={200}
+          className="w-full h-40 border rounded-md cursor-crosshair bg-white touch-none"
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={(e) => {
+            e.preventDefault();
+            if (!ctx || !canvasRef.current) return;
+            const touch = e.touches[0];
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            setIsDrawing(true);
+            setIsEmpty(false);
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            if (!isDrawing || !ctx || !canvasRef.current) return;
+            const touch = e.touches[0];
+            const rect = canvasRef.current.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+          }}
+          onTouchEnd={() => {
+            if (!ctx) return;
+            ctx.closePath();
+            setIsDrawing(false);
+            saveSignature();
+          }}
+        />
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs text-gray-500">Signez dans la zone ci-dessus</p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={clearSignature}
+              className="h-8"
+            >
+              <Trash className="h-3 w-3 mr-1" />
+              Effacer
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={saveSignature}
+              disabled={isEmpty}
+              className="h-8"
+            >
+              <Undo2 className="h-3 w-3 mr-1" />
+              Sauvegarder
+            </Button>
+          </div>
+        </div>
+      </div>
+      {value && (
+        <div className="p-2 border rounded bg-gray-50">
+          <p className="text-xs text-gray-600">Signature enregistrée ✓</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function EmployeeAssetsPage() {
   const {
     loans,
@@ -95,6 +291,10 @@ export default function EmployeeAssetsPage() {
   const [selectedLoan, setSelectedLoan] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
+  // État pour afficher les détails d'un prêt spécifique
+  const [selectedLoanDetails, setSelectedLoanDetails] = useState<any>(null);
+  const [showLoanDetails, setShowLoanDetails] = useState(false);
+
   const [formData, setFormData] = useState<CreateAssetLoanData>({
     asset_id: 0,
     user_id: 0,
@@ -104,10 +304,19 @@ export default function EmployeeAssetsPage() {
   });
 
   useEffect(() => {
+    console.log("Initialisation du composant, chargement des données...");
     fetchLoans();
     fetchAssets();
-    fetchUsers(); // Charger les utilisateurs
+    fetchUsers();
   }, []);
+
+  useEffect(() => {
+    console.log("Loans data:", loans);
+    console.log("Assets data:", assets);
+    console.log("Users data:", users);
+    console.log("Loans loading:", loansLoading);
+    console.log("Loans error:", loansError);
+  }, [loans, assets, users, loansLoading, loansError]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -115,11 +324,14 @@ export default function EmployeeAssetsPage() {
     clearLoansError();
 
     try {
+      console.log("Creating loan with data:", formData);
       await createLoan(formData);
       resetForm();
       setIsDialogOpen(false);
+      fetchLoans();
+      fetchAssets();
     } catch (err) {
-      console.error("Erreur:", err);
+      console.error("Erreur création prêt:", err);
     } finally {
       setSubmitting(false);
     }
@@ -131,11 +343,14 @@ export default function EmployeeAssetsPage() {
     clearLoansError();
 
     try {
+      console.log("Returning loan:", selectedLoan?.id);
       await returnLoan(selectedLoan.id, new Date().toISOString().split("T")[0]);
       setIsReturnDialogOpen(false);
       setSelectedLoan(null);
+      fetchLoans();
+      fetchAssets();
     } catch (err) {
-      console.error("Erreur:", err);
+      console.error("Erreur retour prêt:", err);
     } finally {
       setSubmitting(false);
     }
@@ -151,24 +366,37 @@ export default function EmployeeAssetsPage() {
     });
   };
 
-  const availableAssets = getAssetsAvailableForLoan();
+  const availableAssets = getAssetsAvailableForLoan
+    ? getAssetsAvailableForLoan()
+    : [];
   console.log("Available Assets:", availableAssets);
-  const activeLoans = getActiveLoans();
-  const overdueLoans = getOverdueLoans();
-  const activeUsers = users.filter(
-    (user) =>
-      user.role === "employe" ||
-      user.role === "admin" ||
-      user.role === "comptable"
-  );
 
-  const filteredLoans = loans
-    .filter(
-      (loan) =>
-        loan.asset?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        loan.user?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        loan.user?.email.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  const activeLoans = getActiveLoans ? getActiveLoans() : [];
+  const overdueLoans = getOverdueLoans ? getOverdueLoans() : [];
+  const activeUsers = Array.isArray(users)
+    ? users.filter(
+        (user) =>
+          (user.role === "employe" ||
+            user.role === "admin" ||
+            user.role === "comptable") &&
+          user.id
+      )
+    : [];
+
+  const filteredLoans = (Array.isArray(loans) ? loans : [])
+    .filter((loan) => {
+      if (!loan) return false;
+
+      const assetName = loan.asset?.name || "";
+      const userName = loan.user?.name || "";
+      const userEmail = loan.user?.email || "";
+
+      return (
+        assetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        userEmail.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    })
     .filter((loan) => {
       if (activeTab === "all") return true;
       if (activeTab === "overdue") return isOverdue(loan.due_date);
@@ -208,6 +436,56 @@ export default function EmployeeAssetsPage() {
     </Card>
   );
 
+  const handleSignatureSave = (signature: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      signature,
+    }));
+  };
+
+  const handleSignatureClear = () => {
+    setFormData((prev) => ({
+      ...prev,
+      signature: "",
+    }));
+  };
+
+  const handleViewSignature = (signature: string) => {
+    const win = window.open();
+    if (win) {
+      win.document.write(`
+        <html>
+          <body style="margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+            <img src="${signature}" style="max-width: 100%; max-height: 90vh; border: 1px solid #ccc; border-radius: 4px;" />
+          </body>
+        </html>
+      `);
+    }
+  };
+
+  // Fonction pour afficher les détails d'un prêt
+  const showLoanDetail = (loan: any) => {
+    setSelectedLoanDetails(loan);
+    setShowLoanDetails(true);
+  };
+
+  // Fonction pour supprimer un prêt
+  const handleDeleteLoan = async (loanId: number) => {
+    if (
+      confirm(
+        "Êtes-vous sûr de vouloir supprimer ce prêt ? Cette action est irréversible."
+      )
+    ) {
+      try {
+        await deleteLoan(loanId);
+        setShowLoanDetails(false);
+        setTimeout(() => fetchLoans(), 100);
+      } catch (err) {
+        console.error("Erreur suppression prêt:", err);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
@@ -219,6 +497,24 @@ export default function EmployeeAssetsPage() {
             Gestion des prêts de matériel aux employés
           </p>
         </div>
+
+        {loansError && (
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md mb-4">
+            <p className="font-medium">Erreur de chargement:</p>
+            <p className="text-sm">{loansError.message || "Erreur inconnue"}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => {
+                clearLoansError();
+                fetchLoans();
+              }}
+            >
+              Réessayer
+            </Button>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -243,7 +539,7 @@ export default function EmployeeAssetsPage() {
                 )}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Nouveau Prêt de Matériel</DialogTitle>
                 <DialogDescription>
@@ -251,19 +547,21 @@ export default function EmployeeAssetsPage() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
+                <div className="space-y-2">
                   <Label>Employé *</Label>
                   <Select
-                    value={formData.user_id.toString()}
+                    value={
+                      formData.user_id > 0 ? formData.user_id.toString() : ""
+                    }
                     onValueChange={(value) =>
                       setFormData((prev) => ({
                         ...prev,
-                        user_id: parseInt(value),
+                        user_id: parseInt(value) || 0,
                       }))
                     }
                     required
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Sélectionnez un employé" />
                     </SelectTrigger>
                     <SelectContent>
@@ -280,7 +578,11 @@ export default function EmployeeAssetsPage() {
                         </SelectItem>
                       ) : (
                         activeUsers.map((user) => (
-                          <SelectItem key={user.id} value={user.id.toString()}>
+                          <SelectItem
+                            className="flex"
+                            key={user.id}
+                            value={user.id.toString()}
+                          >
                             <div className="flex flex-col">
                               <span>{user.name}</span>
                               <span className="text-xs text-gray-500">
@@ -294,19 +596,21 @@ export default function EmployeeAssetsPage() {
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Matériel *</Label>
                   <Select
-                    value={formData.asset_id.toString()}
+                    value={
+                      formData.asset_id > 0 ? formData.asset_id.toString() : ""
+                    }
                     onValueChange={(value) =>
                       setFormData((prev) => ({
                         ...prev,
-                        asset_id: parseInt(value),
+                        asset_id: parseInt(value) || 0,
                       }))
                     }
                     required
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Sélectionnez un matériel" />
                     </SelectTrigger>
                     <SelectContent>
@@ -317,6 +621,7 @@ export default function EmployeeAssetsPage() {
                       ) : (
                         availableAssets.map((asset) => (
                           <SelectItem
+                            className="flex"
                             key={asset.id}
                             value={asset.id.toString()}
                           >
@@ -342,7 +647,7 @@ export default function EmployeeAssetsPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="space-y-2">
                     <Label>Date de prêt *</Label>
                     <Input
                       type="date"
@@ -356,7 +661,7 @@ export default function EmployeeAssetsPage() {
                       required
                     />
                   </div>
-                  <div>
+                  <div className="space-y-2">
                     <Label>Date de retour prévue</Label>
                     <Input
                       type="date"
@@ -372,22 +677,34 @@ export default function EmployeeAssetsPage() {
                   </div>
                 </div>
 
-                <div>
-                  <Label>Signature (URL ou hash)</Label>
-                  <Input
-                    value={formData.signature || ""}
-                    onChange={(e) =>
+                <div className="space-y-2">
+                  <Label>Signature numérique de l'employé *</Label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    L'employé doit signer dans la zone ci-dessous pour accepter
+                    le prêt du matériel
+                  </p>
+                  <SignaturePad
+                    onSave={handleSignatureSave}
+                    onClear={handleSignatureClear}
+                    value={formData.signature}
+                    onChange={(value) =>
                       setFormData((prev) => ({
                         ...prev,
-                        signature: e.target.value,
+                        signature: value,
                       }))
                     }
-                    placeholder="Optionnel - pour signature numérique"
                   />
                 </div>
 
                 <DialogFooter>
-                  <Button type="button" variant="outline" onClick={resetForm}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      resetForm();
+                      setIsDialogOpen(false);
+                    }}
+                  >
                     Annuler
                   </Button>
                   <Button
@@ -396,7 +713,8 @@ export default function EmployeeAssetsPage() {
                     disabled={
                       submitting ||
                       availableAssets.length === 0 ||
-                      activeUsers.length === 0
+                      activeUsers.length === 0 ||
+                      !formData.signature
                     }
                   >
                     {submitting ? (
@@ -490,9 +808,35 @@ export default function EmployeeAssetsPage() {
               <Skeleton key={i} className="h-20 w-full" />
             ))}
           </div>
+        ) : loansError ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                Erreur de chargement
+              </h3>
+              <p className="text-gray-500 mb-4">
+                Impossible de charger les prêts. Veuillez réessayer.
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  clearLoansError();
+                  fetchLoans();
+                }}
+              >
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Réessayer
+              </Button>
+            </CardContent>
+          </Card>
         ) : filteredLoans.length > 0 ? (
           filteredLoans.map((loan) => (
-            <Card key={loan.id} className="hover:shadow-md transition-shadow">
+            <Card
+              key={loan.id}
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => showLoanDetail(loan)}
+            >
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-1">
@@ -513,22 +857,28 @@ export default function EmployeeAssetsPage() {
                         <div className="flex items-center gap-2">
                           <Laptop className="h-4 w-4 text-gray-400" />
                           <span className="font-semibold">
-                            {loan.asset?.name}
+                            {loan.asset?.name || "Matériel inconnu"}
                           </span>
                           {loan.asset?.serial_number && (
                             <span className="text-sm text-gray-500">
                               (S/N: {loan.asset.serial_number})
                             </span>
                           )}
+                          {loan.signature && (
+                            <Badge
+                              variant="outline"
+                              className="bg-green-50 text-green-700 border-green-200 text-xs"
+                            >
+                              Signé
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <User className="h-4 w-4 text-gray-400" />
                           <span className="text-sm text-gray-600">
-                            {loan.user?.name} • {loan.user?.email}
+                            {loan.user?.name || "Utilisateur inconnu"} •{" "}
+                            {loan.user?.email || "Email inconnu"}
                           </span>
-                          <Badge variant="outline" className="text-xs">
-                            {loan.user?.role}
-                          </Badge>
                         </div>
                         <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
                           <span>Prêt: {formatDate(loan.loan_date)}</span>
@@ -553,12 +903,16 @@ export default function EmployeeAssetsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {loan.status === "en_cours" && (
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setSelectedLoan(loan);
                           setIsReturnDialogOpen(true);
                         }}
@@ -573,6 +927,14 @@ export default function EmployeeAssetsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {loan.signature && (
+                          <DropdownMenuItem
+                            onClick={() => handleViewSignature(loan.signature)}
+                          >
+                            <User className="h-4 w-4 mr-2" />
+                            Voir la signature
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           className="text-red-600"
                           onClick={() => {
@@ -582,6 +944,7 @@ export default function EmployeeAssetsPage() {
                               )
                             ) {
                               deleteLoan(loan.id);
+                              setTimeout(() => fetchLoans(), 100);
                             }
                           }}
                         >
@@ -622,14 +985,225 @@ export default function EmployeeAssetsPage() {
         )}
       </div>
 
+      {/* Dialog pour afficher les détails d'un prêt spécifique */}
+      <Dialog open={showLoanDetails} onOpenChange={setShowLoanDetails}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>
+                  Détails du prêt #{selectedLoanDetails?.id}
+                </DialogTitle>
+                <DialogDescription>
+                  Informations complètes sur ce prêt de matériel
+                </DialogDescription>
+              </div>
+             
+            </div>
+          </DialogHeader>
+
+          {selectedLoanDetails && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 md:grid-cols-2 gap-5">
+                {/* Matériel */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Matériel
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <Laptop className="h-5 w-5 text-blue-500" />
+                          <div>
+                            <p className="font-semibold">
+                              {selectedLoanDetails.asset?.name || "N/A"}
+                            </p>
+                            {selectedLoanDetails.asset?.serial_number && (
+                              <p className="text-sm text-gray-600">
+                                N° série:{" "}
+                                {selectedLoanDetails.asset.serial_number}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Employé
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <User className="h-5 w-5 text-blue-500" />
+                          <div>
+                            <p className="font-semibold">
+                              {selectedLoanDetails.user?.name || "N/A"}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              {selectedLoanDetails.user?.email || "N/A"}
+                            </p>
+                            {selectedLoanDetails.user?.role && (
+                              <Badge variant="outline" className="mt-1">
+                                {selectedLoanDetails.user.role}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Dates et statut */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Dates
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">
+                            Date de prêt:
+                          </span>
+                          <span className="font-medium">
+                            {formatDate(selectedLoanDetails.loan_date)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-600">
+                            Retour prévu:
+                          </span>
+                          <span
+                            className={`font-medium ${
+                              isOverdue(selectedLoanDetails.due_date) &&
+                              selectedLoanDetails.status === "en_cours"
+                                ? "text-red-600"
+                                : ""
+                            }`}
+                          >
+                            {formatDate(selectedLoanDetails.due_date)}
+                          </span>
+                        </div>
+                        {selectedLoanDetails.return_date && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-600">
+                              Date de retour:
+                            </span>
+                            <span className="font-medium text-green-600">
+                              {formatDate(selectedLoanDetails.return_date)}
+                            </span>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Statut
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              className={getStatusColor(
+                                selectedLoanDetails.status
+                              )}
+                            >
+                              {selectedLoanDetails.status === "en_cours"
+                                ? "En cours"
+                                : "Terminé"}
+                            </Badge>
+                            {isOverdue(selectedLoanDetails.due_date) &&
+                              selectedLoanDetails.status === "en_cours" && (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-red-100 text-red-800 border-red-200"
+                                >
+                                  En retard
+                                </Badge>
+                              )}
+                          </div>
+                          {selectedLoanDetails.signature && (
+                            <Badge
+                              variant="outline"
+                              className="bg-green-50 text-green-700 border-green-200"
+                            >
+                              Signé
+                            </Badge>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signature */}
+              {selectedLoanDetails.signature && (
+                <div>
+                  <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                    Signature de l'employé
+                  </h3>
+                  <Card>
+                    <CardContent className="">
+                      <div className="flex flex-col items-center">
+                        <img
+                          src={selectedLoanDetails.signature}
+                          alt="Signature"
+                          className=" max-h-20 object-contain border rounded"
+                        />
+                       
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t">
+                {selectedLoanDetails.status === "en_cours" && (
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      setSelectedLoan(selectedLoanDetails);
+                      setShowLoanDetails(false);
+                      setIsReturnDialogOpen(true);
+                    }}
+                  >
+                    Retourner le matériel
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  className="flex-1 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border-red-200"
+                  onClick={() => handleDeleteLoan(selectedLoanDetails.id)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Supprimer
+                </Button>
+               
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog de retour */}
       <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Retour de Matériel</DialogTitle>
             <DialogDescription>
-              Confirmez le retour du matériel "{selectedLoan?.asset?.name}" par{" "}
-              {selectedLoan?.user?.name}
+              Confirmez le retour du matériel "
+              {selectedLoan?.asset?.name || "Matériel"}" par{" "}
+              {selectedLoan?.user?.name || "Utilisateur"}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleReturn}>

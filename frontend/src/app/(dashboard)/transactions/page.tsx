@@ -26,7 +26,6 @@ import {
   TrendingUp,
   TrendingDown,
   Filter,
-  Download,
   Loader2,
   Edit,
   Trash2,
@@ -34,6 +33,8 @@ import {
   X,
   Calendar,
   Landmark,
+  CheckCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -65,6 +66,10 @@ const getTransactionTypeColor = (type: TransactionType) => {
     : "bg-red-100 text-red-800 border-red-200";
 };
 
+const getTransactionTypeText = (type: TransactionType) => {
+  return type === "revenu" ? "Revenu" : "Dépense";
+};
+
 export default function TransactionsPage() {
   const { accounts, fetchAccounts } = useAccount();
   const { categories, fetchCategories } = useTransactionCategory();
@@ -85,7 +90,14 @@ export default function TransactionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  
+
+  // États pour les notifications
+  const [notification, setNotification] = useState<{
+    type: "success" | "error" | "info" | "warning";
+    message: string;
+    title?: string;
+  } | null>(null);
+
   // États pour la recherche et les filtres
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -98,9 +110,13 @@ export default function TransactionsPage() {
     min: "",
     max: "",
   });
-  const [sortBy, setSortBy] = useState<"date" | "amount" | "description">("date");
+  const [sortBy, setSortBy] = useState<"date" | "amount" | "description">(
+    "date"
+  );
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [showFilters, setShowFilters] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
   const [filters, setFilters] = useState<TransactionFilters>({
     type: "depense",
@@ -114,6 +130,18 @@ export default function TransactionsPage() {
     description: "",
     transaction_date: new Date().toISOString().split("T")[0],
   });
+
+  // Afficher une notification
+  const showNotification = (
+    type: "success" | "error" | "info" | "warning",
+    message: string,
+    title?: string
+  ) => {
+    setNotification({ type, message, title });
+    setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+  };
 
   useEffect(() => {
     fetchTransactions();
@@ -136,13 +164,33 @@ export default function TransactionsPage() {
     try {
       if (isEditMode && selectedTransaction) {
         await updateTransaction(selectedTransaction.id, formData);
+        showNotification(
+          "success",
+          `Transaction "${
+            formData.description || "sans description"
+          }" modifiée avec succès`,
+          "Modification réussie"
+        );
       } else {
         await createTransaction(formData);
+        showNotification(
+          "success",
+          `Nouvelle transaction "${
+            formData.description || "sans description"
+          }" créée avec succès`,
+          "Création réussie"
+        );
       }
       resetForm();
       setIsDialogOpen(false);
+      fetchTransactions();
     } catch (err) {
       console.error("Erreur:", err);
+      showNotification(
+        "error",
+        "Une erreur est survenue lors de l'opération",
+        "Erreur"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -179,33 +227,46 @@ export default function TransactionsPage() {
       if (transaction.type !== activeTab) return false;
 
       // Filtre par recherche
-      const matchesSearch = 
-        transaction.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.category?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.account?.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesSearch =
+        transaction.description
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        transaction.category?.name
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        transaction.account?.name
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase());
 
       // Filtre par catégorie
-      const matchesCategory = 
-        categoryFilter === "all" || 
+      const matchesCategory =
+        categoryFilter === "all" ||
         transaction.transaction_category_id?.toString() === categoryFilter;
 
       // Filtre par compte
-      const matchesAccount = 
-        accountFilter === "all" || 
+      const matchesAccount =
+        accountFilter === "all" ||
         transaction.account_id.toString() === accountFilter;
 
       // Filtre par date
       const transactionDate = new Date(transaction.transaction_date);
-      const matchesDateRange = 
+      const matchesDateRange =
         (!dateRange.start || transactionDate >= new Date(dateRange.start)) &&
         (!dateRange.end || transactionDate <= new Date(dateRange.end));
 
       // Filtre par montant
       const matchesAmountRange =
-        (!amountRange.min || transaction.amount >= parseFloat(amountRange.min)) &&
+        (!amountRange.min ||
+          transaction.amount >= parseFloat(amountRange.min)) &&
         (!amountRange.max || transaction.amount <= parseFloat(amountRange.max));
 
-      return matchesSearch && matchesCategory && matchesAccount && matchesDateRange && matchesAmountRange;
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesAccount &&
+        matchesDateRange &&
+        matchesAmountRange
+      );
     });
 
     // Trier les transactions
@@ -248,15 +309,19 @@ export default function TransactionsPage() {
     dateRange,
     amountRange,
     sortBy,
-    sortOrder
+    sortOrder,
   ]);
 
   // Statistiques filtrées
   const filteredStats = useMemo(() => {
     const filtered = filteredAndSortedTransactions;
-    const totalAmount = filtered.reduce((sum, transaction) => sum + transaction.amount, 0);
-    const averageAmount = filtered.length > 0 ? totalAmount / filtered.length : 0;
-    
+    const totalAmount = filtered.reduce(
+      (sum, transaction) => sum + transaction.amount,
+      0
+    );
+    const averageAmount =
+      filtered.length > 0 ? totalAmount / filtered.length : 0;
+
     return {
       count: filtered.length,
       totalAmount,
@@ -273,10 +338,97 @@ export default function TransactionsPage() {
   const expenseCategories = categories.filter((cat) => cat.type === "depense");
 
   // Catégories et comptes pour les filtres
-  const currentCategories = activeTab === "revenu" ? revenueCategories : expenseCategories;
+  const currentCategories =
+    activeTab === "revenu" ? revenueCategories : expenseCategories;
+
+  // Fonction pour gérer le clic sur une carte
+  const handleCardClick = (transaction: any) => {
+    setSelectedTransaction(transaction);
+    setIsDetailsDialogOpen(true);
+  };
+
+  // Fonction pour modifier une transaction depuis les détails
+  const handleEditFromDetails = (transaction: any) => {
+    setSelectedTransaction(transaction);
+    setFormData({
+      account_id: transaction.account_id,
+      transaction_category_id: transaction.transaction_category_id,
+      type: transaction.type,
+      amount: transaction.amount,
+      description: transaction.description || "",
+      transaction_date: transaction.transaction_date,
+    });
+    setIsEditMode(true);
+    setIsDetailsDialogOpen(false);
+    setIsDialogOpen(true);
+  };
+
+  // Fonction pour supprimer une transaction avec confirmation
+  const handleDeleteTransaction = async (transaction: any) => {
+    try {
+      await deleteTransaction(transaction.id);
+      showNotification(
+        "success",
+        `Transaction "${
+          transaction.description || "sans description"
+        }" supprimée avec succès`,
+        "Suppression réussie"
+      );
+      setIsDetailsDialogOpen(false);
+      fetchTransactions();
+    } catch (err) {
+      console.error("Erreur:", err);
+      showNotification(
+        "error",
+        "Une erreur est survenue lors de la suppression",
+        "Erreur"
+      );
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
+      {/* Notification */}
+      {notification && (
+        <div
+          className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border animate-in slide-in-from-right ${
+            notification.type === "success"
+              ? "bg-green-50 border-green-200 text-green-800"
+              : notification.type === "error"
+              ? "bg-red-50 border-red-200 text-red-800"
+              : notification.type === "warning"
+              ? "bg-yellow-50 border-yellow-200 text-yellow-800"
+              : "bg-blue-50 border-blue-200 text-blue-800"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {notification.type === "success" && (
+              <CheckCircle className="h-5 w-5" />
+            )}
+            {notification.type === "error" && (
+              <AlertTriangle className="h-5 w-5" />
+            )}
+            {notification.type === "warning" && (
+              <AlertTriangle className="h-5 w-5" />
+            )}
+            <div>
+              {notification.title && (
+                <p className="font-semibold">{notification.title}</p>
+              )}
+              <p className="text-sm">{notification.message}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-4"
+              onClick={() => setNotification(null)}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -431,9 +583,9 @@ export default function TransactionsPage() {
                 </div>
 
                 <DialogFooter>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={() => {
                       setIsDialogOpen(false);
                       resetForm();
@@ -458,11 +610,6 @@ export default function TransactionsPage() {
               </form>
             </DialogContent>
           </Dialog>
-
-          <Button variant="outline" className="flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Exporter
-          </Button>
         </div>
       </div>
 
@@ -579,8 +726,16 @@ export default function TransactionsPage() {
               >
                 <Filter className="h-4 w-4" />
                 Filtres
-                {(categoryFilter !== "all" || accountFilter !== "all" || dateRange.start || dateRange.end || amountRange.min || amountRange.max) && (
-                  <Badge variant="secondary" className="ml-1 bg-blue-100 text-blue-800">
+                {(categoryFilter !== "all" ||
+                  accountFilter !== "all" ||
+                  dateRange.start ||
+                  dateRange.end ||
+                  amountRange.min ||
+                  amountRange.max) && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-1 bg-blue-100 text-blue-800"
+                  >
                     !
                   </Badge>
                 )}
@@ -589,7 +744,9 @@ export default function TransactionsPage() {
               {/* Tabs pour revenus/dépenses */}
               <Tabs
                 value={activeTab}
-                onValueChange={(value) => setActiveTab(value as TransactionType)}
+                onValueChange={(value) =>
+                  setActiveTab(value as TransactionType)
+                }
               >
                 <TabsList>
                   <TabsTrigger value="depense">Dépenses</TabsTrigger>
@@ -599,8 +756,15 @@ export default function TransactionsPage() {
 
               {/* Tri */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600 whitespace-nowrap">Trier par:</span>
-                <Select value={sortBy} onValueChange={(value: "date" | "amount" | "description") => setSortBy(value)}>
+                <span className="text-sm text-gray-600 whitespace-nowrap">
+                  Trier par:
+                </span>
+                <Select
+                  value={sortBy}
+                  onValueChange={(value: "date" | "amount" | "description") =>
+                    setSortBy(value)
+                  }
+                >
                   <SelectTrigger className="w-32">
                     <SelectValue />
                   </SelectTrigger>
@@ -610,11 +774,13 @@ export default function TransactionsPage() {
                     <SelectItem value="description">Description</SelectItem>
                   </SelectContent>
                 </Select>
-                
+
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                  onClick={() =>
+                    setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                  }
                   className="h-10 w-10"
                 >
                   {sortOrder === "asc" ? "A→Z" : "Z→A"}
@@ -622,7 +788,13 @@ export default function TransactionsPage() {
               </div>
 
               {/* Bouton réinitialiser */}
-              {(searchTerm || categoryFilter !== "all" || accountFilter !== "all" || dateRange.start || dateRange.end || amountRange.min || amountRange.max) && (
+              {(searchTerm ||
+                categoryFilter !== "all" ||
+                accountFilter !== "all" ||
+                dateRange.start ||
+                dateRange.end ||
+                amountRange.min ||
+                amountRange.max) && (
                 <Button
                   variant="outline"
                   onClick={resetFilters}
@@ -642,14 +814,20 @@ export default function TransactionsPage() {
                 {/* Filtre par catégorie */}
                 <div>
                   <Label className="text-sm font-medium">Catégorie</Label>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <Select
+                    value={categoryFilter}
+                    onValueChange={setCategoryFilter}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Toutes les catégories" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Toutes les catégories</SelectItem>
                       {currentCategories.map((category) => (
-                        <SelectItem key={category.id} value={category.id.toString()}>
+                        <SelectItem
+                          key={category.id}
+                          value={category.id.toString()}
+                        >
                           {category.name}
                         </SelectItem>
                       ))}
@@ -660,14 +838,20 @@ export default function TransactionsPage() {
                 {/* Filtre par compte */}
                 <div>
                   <Label className="text-sm font-medium">Compte</Label>
-                  <Select value={accountFilter} onValueChange={setAccountFilter}>
+                  <Select
+                    value={accountFilter}
+                    onValueChange={setAccountFilter}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Tous les comptes" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tous les comptes</SelectItem>
                       {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id.toString()}>
+                        <SelectItem
+                          key={account.id}
+                          value={account.id.toString()}
+                        >
                           {account.name}
                         </SelectItem>
                       ))}
@@ -681,7 +865,12 @@ export default function TransactionsPage() {
                   <Input
                     type="date"
                     value={dateRange.start}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    onChange={(e) =>
+                      setDateRange((prev) => ({
+                        ...prev,
+                        start: e.target.value,
+                      }))
+                    }
                   />
                 </div>
 
@@ -690,7 +879,9 @@ export default function TransactionsPage() {
                   <Input
                     type="date"
                     value={dateRange.end}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                    onChange={(e) =>
+                      setDateRange((prev) => ({ ...prev, end: e.target.value }))
+                    }
                   />
                 </div>
               </div>
@@ -704,7 +895,12 @@ export default function TransactionsPage() {
                     step="0.01"
                     placeholder="0"
                     value={amountRange.min}
-                    onChange={(e) => setAmountRange(prev => ({ ...prev, min: e.target.value }))}
+                    onChange={(e) =>
+                      setAmountRange((prev) => ({
+                        ...prev,
+                        min: e.target.value,
+                      }))
+                    }
                   />
                 </div>
                 <div>
@@ -714,7 +910,12 @@ export default function TransactionsPage() {
                     step="0.01"
                     placeholder="∞"
                     value={amountRange.max}
-                    onChange={(e) => setAmountRange(prev => ({ ...prev, max: e.target.value }))}
+                    onChange={(e) =>
+                      setAmountRange((prev) => ({
+                        ...prev,
+                        max: e.target.value,
+                      }))
+                    }
                   />
                 </div>
               </div>
@@ -724,18 +925,11 @@ export default function TransactionsPage() {
           {/* Résultats du filtrage */}
           <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-gray-600">
             <span>
-              {filteredStats.count} transaction{filteredStats.count > 1 ? "s" : ""} trouvée{filteredStats.count > 1 ? "s" : ""}
+              {filteredStats.count} transaction
+              {filteredStats.count > 1 ? "s" : ""} trouvée
+              {filteredStats.count > 1 ? "s" : ""}
               {searchTerm && ` pour "${searchTerm}"`}
             </span>
-            
-            {filteredStats.count > 0 && (
-              <span className={`font-medium ${
-                activeTab === "revenu" ? "text-green-600" : "text-red-600"
-              }`}>
-                Total: {formatCurrency(filteredStats.totalAmount)}
-                {filteredStats.count > 1 && ` • Moyenne: ${formatCurrency(filteredStats.averageAmount)}`}
-              </span>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -752,7 +946,8 @@ export default function TransactionsPage() {
           filteredAndSortedTransactions.map((transaction) => (
             <Card
               key={transaction.id}
-              className="hover:shadow-md transition-shadow"
+              className="hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => handleCardClick(transaction)}
             >
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
@@ -761,7 +956,7 @@ export default function TransactionsPage() {
                       <Badge
                         className={getTransactionTypeColor(transaction.type)}
                       >
-                        {transaction.type === "revenu" ? "Revenu" : "Dépense"}
+                        {getTransactionTypeText(transaction.type)}
                       </Badge>
                       <div className="flex-1">
                         <p className="font-semibold">
@@ -783,13 +978,18 @@ export default function TransactionsPage() {
                           <span>•</span>
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            <span>{formatDate(transaction.transaction_date)}</span>
+                            <span>
+                              {formatDate(transaction.transaction_date)}
+                            </span>
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div
+                    className="flex items-center gap-4"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <p
                       className={`text-lg font-bold ${
                         transaction.type === "revenu"
@@ -808,18 +1008,7 @@ export default function TransactionsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
                           onClick={() => {
-                            setSelectedTransaction(transaction);
-                            setFormData({
-                              account_id: transaction.account_id,
-                              transaction_category_id:
-                                transaction.transaction_category_id,
-                              type: transaction.type,
-                              amount: transaction.amount,
-                              description: transaction.description || "",
-                              transaction_date: transaction.transaction_date,
-                            });
-                            setIsEditMode(true);
-                            setIsDialogOpen(true);
+                            handleEditFromDetails(transaction);
                           }}
                         >
                           <Edit className="h-4 w-4 mr-2" />
@@ -827,7 +1016,15 @@ export default function TransactionsPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={() => deleteTransaction(transaction.id)}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                "Êtes-vous sûr de vouloir supprimer cette transaction ? Cette action est irréversible."
+                              )
+                            ) {
+                              handleDeleteTransaction(transaction);
+                            }
+                          }}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Supprimer
@@ -844,14 +1041,20 @@ export default function TransactionsPage() {
             <CardContent className="p-8 text-center">
               <TrendingUp className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">
-                {transactions.length === 0 ? "Aucune transaction" : "Aucun résultat"}
+                {transactions.length === 0
+                  ? "Aucune transaction"
+                  : "Aucun résultat"}
               </h3>
               <p className="text-gray-500 mb-4">
-                {searchTerm || categoryFilter !== "all" || accountFilter !== "all" || dateRange.start || dateRange.end
+                {searchTerm ||
+                categoryFilter !== "all" ||
+                accountFilter !== "all" ||
+                dateRange.start ||
+                dateRange.end
                   ? "Aucune transaction ne correspond à vos critères de recherche"
                   : "Commencez par enregistrer votre première transaction"}
               </p>
-              <Button 
+              <Button
                 onClick={() => {
                   if (transactions.length === 0) {
                     setIsDialogOpen(true);
@@ -861,12 +1064,169 @@ export default function TransactionsPage() {
                 }}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                {transactions.length === 0 ? "Nouvelle Transaction" : "Réinitialiser les filtres"}
+                {transactions.length === 0
+                  ? "Nouvelle Transaction"
+                  : "Réinitialiser les filtres"}
               </Button>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {/* Dialog de détails de la transaction */}
+      <Dialog open={isDetailsDialogOpen} onOpenChange={setIsDetailsDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Détails de la transaction</DialogTitle>
+                <DialogDescription>
+                  Informations complètes sur cette transaction
+                </DialogDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsDetailsDialogOpen(false)}
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+
+          {selectedTransaction && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Informations principales */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Type et description
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            className={getTransactionTypeColor(
+                              selectedTransaction.type
+                            )}
+                          >
+                            {getTransactionTypeText(selectedTransaction.type)}
+                          </Badge>
+                          <p className="font-semibold">
+                            {selectedTransaction.description ||
+                              "Sans description"}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Montant
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <p
+                          className={`text-2xl font-bold ${
+                            selectedTransaction.type === "revenu"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {formatCurrency(selectedTransaction.amount)}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Montant de la transaction
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+
+                {/* Informations supplémentaires */}
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Catégorie
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">
+                            {selectedTransaction.category?.name ||
+                              "Non catégorisé"}
+                          </span>
+                          <Badge variant="outline">Catégorie</Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
+                      Compte et date
+                    </h3>
+                    <Card>
+                      <CardContent className="p-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Landmark className="h-4 w-4 text-gray-400" />
+                          <span className="font-medium">
+                            {selectedTransaction.account?.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-gray-400" />
+                          <span className="text-sm text-gray-600">
+                            {formatDate(selectedTransaction.transaction_date)}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4 border-t">
+                <Button
+                  className="flex-1"
+                  onClick={() => handleEditFromDetails(selectedTransaction)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Modifier
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border-red-200"
+                  onClick={() => {
+                    if (
+                      confirm(
+                        "Êtes-vous sûr de vouloir supprimer cette transaction ? Cette action est irréversible."
+                      )
+                    ) {
+                      handleDeleteTransaction(selectedTransaction);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Supprimer
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setIsDetailsDialogOpen(false)}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Fermer
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
