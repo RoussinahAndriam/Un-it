@@ -43,4 +43,9 @@ class Account extends Model
     {
         return $this->hasMany(Asset::class);
     }
+
+    public function applications()
+    {
+        return $this->hasMany(Application::class);
+    }
 }

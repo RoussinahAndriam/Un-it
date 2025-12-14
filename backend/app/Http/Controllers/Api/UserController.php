@@ -13,8 +13,7 @@ use Illuminate\Support\Facades\Auth;
 
 class UserController extends Controller
 {
-    // (Note: Ce contrôleur est protégé par 'auth:sanctum' et 'role:admin' dans routes/api.php)
-
+   
     /**
      * Affiche la liste des utilisateurs.
      */
@@ -27,11 +26,10 @@ class UserController extends Controller
             return response()->json(['message' => 'Erreur serveur.', 'error' => $e->getMessage()], 500);
         }
     }
-
     /**
      * Crée un nouvel utilisateur (Admin).
      */
-    public function store(StoreUserRequest $request) // <-- Utilisation de Form Request
+    public function store(StoreUserRequest $request) 
     {
         $validated = $request->validated();
         
@@ -47,10 +45,6 @@ class UserController extends Controller
             return response()->json(['message' => 'Erreur lors de la création.', 'error' => $e->getMessage()], 500);
         }
     }
-
-    /**
-     * Affiche un utilisateur spécifique.
-     */
     public function show(User $user)
     {
         return response()->json(['data' => $user], 200);

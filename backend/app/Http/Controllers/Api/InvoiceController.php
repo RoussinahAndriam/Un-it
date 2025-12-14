@@ -215,28 +215,20 @@ class InvoiceController extends Controller
         }
     }
 
-    /**
-     * Envoyer la facture par email (RÉEL, AVEC PDF). (Fct 2.7)
-     */
     public function sendInvoice(Request $request, Invoice $invoice)
     {
         try {
-            // 0. Vérifier si c'est une facture client et s'il y a un email
+    
             if ($invoice->type != 'client' || empty($invoice->thirdParty->email)) {
                 return response()->json(['message' => 'Facture non-client ou e-mail du client manquant.'], 400);
             }
-
-            // 1. Charger les relations nécessaires pour le PDF
             $invoice->load(['thirdParty', 'lines', 'payments']);
 
-            // 2. Générer le PDF
             $pdf = Pdf::loadView('pdf.invoice', ['invoice' => $invoice]);
-            
-            // 3. Envoyer l'email avec le PDF en pièce jointe
+
             Mail::to($invoice->thirdParty->email)
                 ->send(new SendInvoiceMail($invoice, $pdf));
 
-            // 4. Mettre à jour le statut
             if ($invoice->status == 'brouillon') {
                 $invoice->status = 'envoye';
                 $invoice->save();

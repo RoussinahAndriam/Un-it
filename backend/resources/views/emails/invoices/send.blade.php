@@ -215,7 +215,7 @@
             <!-- Montant principal -->
             <div class="amount-card">
                 <div class="amount-label">MONTANT TOTAL</div>
-                <div class="amount-value">{{ number_format($invoice->total_amount, 2, ',', ' ') }} €</div>
+                <div class="amount-value">{{ number_format($invoice->total_amount, 2, ',', ' ') }} Ar</div>
             </div>
             
             <!-- Détails importants -->
@@ -242,7 +242,7 @@
                 <div class="detail-item">
                     <div class="detail-label">Solde dû</div>
                     <div class="detail-value" style="color: #dc2626;">
-                        {{ number_format($invoice->total_amount - $invoice->amount_paid, 2, ',', ' ') }} €
+                        {{ number_format($invoice->total_amount - $invoice->amount_paid, 2, ',', ' ') }} Ar
                     </div>
                 </div>
             </div>
@@ -284,8 +284,8 @@
             <div class="contact-info">
                 <strong>UN-IT</strong><br>
                 Service Facturation<br>
-                Email: facturation@un-it.fr<br>
-                Téléphone: +33 X XX XX XX XX
+                Email: 	contact@unityfianar.site<br>
+                Téléphone: +261388456158
             </div>
         </div>
     </div>
