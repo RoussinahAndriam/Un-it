@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EllipsisVertical } from "lucide-react";
 import {
   Plus,
   TrendingUp,
@@ -706,7 +707,7 @@ export default function TransactionsPage() {
       <Card className="mb-6">
         <CardContent className="p-6">
           <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-            {/* Barre de recherche */}
+       
             <div className="relative w-full lg:w-auto">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
@@ -1002,7 +1003,8 @@ export default function TransactionsPage() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
-                          <Filter className="h-4 w-4" />
+                          <EllipsisVertical className="h-4 w-4" />
+                     
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -1084,14 +1086,7 @@ export default function TransactionsPage() {
                   Informations complètes sur cette transaction
                 </DialogDescription>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsDetailsDialogOpen(false)}
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+             
             </div>
           </DialogHeader>
 
@@ -1192,7 +1187,7 @@ export default function TransactionsPage() {
               {/* Actions */}
               <div className="flex gap-3 pt-4 border-t">
                 <Button
-                  className="flex-1"
+                  className="flex-1 bg-blue-400"
                   onClick={() => handleEditFromDetails(selectedTransaction)}
                 >
                   <Edit className="h-4 w-4 mr-2" />

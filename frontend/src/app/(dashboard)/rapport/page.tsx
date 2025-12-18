@@ -41,6 +41,7 @@ import {
   Wallet,
   AlertCircle,
   Calendar,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -144,13 +145,24 @@ export default function RapportPage() {
   >(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
 
-  // 🔥 ÉTAT POUR LE MOIS SÉLECTIONNÉ (mois actuel par défaut)
+  // 🔥 ÉTAT POUR LE MOIS ET L'ANNÉE SÉLECTIONNÉS
   const [selectedMonth, setSelectedMonth] = useState<string>(
     (new Date().getMonth() + 1).toString()
   );
-  const [selectedYear, setSelectedYear] = useState(
+  const [selectedYear, setSelectedYear] = useState<string>(
     new Date().getFullYear().toString()
   );
+
+  // 🔥 GÉNÉRER LES ANNÉES DISPONIBLES (3 ans en arrière, année courante, 1 an en avant)
+  const currentYear = new Date().getFullYear();
+  const YEARS = Array.from({ length: 5 }, (_, i) => {
+    const year = currentYear - 2 + i;
+    return {
+      value: year.toString(),
+      label: year.toString(),
+    };
+  });
+
   const [loading, setLoading] = useState({
     monthly: false,
     financial: false,
@@ -174,7 +186,7 @@ export default function RapportPage() {
     }
   };
 
-  // 🔥 FONCTION POUR RÉCUPÉRER LE RÉSUMÉ FINANCIER POUR UN MOIS
+  // 🔥 FONCTION POUR RÉCUPÉRER LE RÉSUMÉ FINANCIER POUR UN MOIS ET UNE ANNÉE
   const fetchFinancialSummary = async () => {
     setLoading((prev) => ({ ...prev, financial: true }));
     try {
@@ -204,7 +216,7 @@ export default function RapportPage() {
     }
   };
 
-  // 🔥 FONCTION POUR RÉCUPÉRER LES STATS MENSUELLES (pour l'année complète)
+  // 🔥 FONCTION POUR RÉCUPÉRER LES STATS MENSUELLES (pour l'année sélectionnée)
   const fetchMonthlyStats = async () => {
     setLoading((prev) => ({ ...prev, monthly: true }));
     try {
@@ -223,6 +235,7 @@ export default function RapportPage() {
     }
   };
 
+  // 🔥 FONCTION POUR RÉCUPÉRER LES ACTIFS (ne dépend pas de l'année)
   const fetchAssetSummary = async () => {
     setLoading((prev) => ({ ...prev, assets: true }));
     try {
@@ -236,12 +249,21 @@ export default function RapportPage() {
     }
   };
 
+  // 🔥 EFFET POUR CHARGER LES DONNÉES QUAND LE MOIS OU L'ANNÉE CHANGE
   useEffect(() => {
     fetchMonthlyStats();
     fetchFinancialSummary();
     fetchAssetSummary();
     fetchAccounts();
-  }, [selectedMonth, selectedYear]); // 🔥 DÉCLENCHEMENT QUAND LE MOIS OU L'ANNÉE CHANGE
+  }, [selectedMonth, selectedYear]);
+
+  // 🔥 MISE À JOUR DE L'ANNÉE PAR DÉFAUT SI L'ANNÉE N'EXISTE PAS DANS LA LISTE
+  useEffect(() => {
+    const yearExists = YEARS.some((year) => year.value === selectedYear);
+    if (!yearExists) {
+      setSelectedYear(currentYear.toString());
+    }
+  }, []);
 
   const moisLabels = [
     "Jan",
@@ -365,8 +387,6 @@ export default function RapportPage() {
     );
   };
 
- 
-
   const exportPdf = () => {
     const monthName =
       MONTHS.find((m) => m.value === selectedMonth)?.label || selectedMonth;
@@ -488,23 +508,39 @@ export default function RapportPage() {
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-          {/* 🔥 FILTRE MOIS */}
-          <div className="flex gap-2">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-40">
-                <Calendar className="w-4 h-4 mr-2" />
-                <SelectValue placeholder="Mois" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map((month) => (
-                  <SelectItem key={month.value} value={month.value}>
-                    {month.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* 🔥 FILTRES MOIS ET ANNÉE */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex gap-2">
+              {/* FILTRE MOIS */}
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-40">
+                  <Calendar className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Mois" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((month) => (
+                    <SelectItem key={month.value} value={month.value}>
+                      {month.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-           
+              {/* FILTRE ANNÉE */}
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-28">
+                  <ChevronDown className="w-4 h-4 mr-2" />
+                  <SelectValue placeholder="Année" />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map((year) => (
+                    <SelectItem key={year.value} value={year.value}>
+                      {year.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <Button
@@ -563,7 +599,7 @@ export default function RapportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Revenus {selectedMonthName}
+                  Revenus {selectedMonthName} {selectedYear}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
                   {totalRevenu.toLocaleString()} FCFA
@@ -587,7 +623,7 @@ export default function RapportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Dépenses {selectedMonthName}
+                  Dépenses {selectedMonthName} {selectedYear}
                 </p>
                 <p className="text-2xl font-bold text-gray-900 mt-2">
                   {totalDepense.toLocaleString()} FCFA
@@ -611,7 +647,7 @@ export default function RapportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">
-                  Bénéfice {selectedMonthName}
+                  Bénéfice {selectedMonthName} {selectedYear}
                 </p>
                 <p
                   className={`text-2xl font-bold mt-2 ${
@@ -725,7 +761,7 @@ export default function RapportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingDown className="w-5 h-5 text-red-600" />
-              Dépenses par Catégorie ({selectedMonthName})
+              Dépenses par Catégorie ({selectedMonthName} {selectedYear})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -786,7 +822,9 @@ export default function RapportPage() {
             ) : (
               <div className="h-80 flex flex-col items-center justify-center text-gray-500">
                 <AlertCircle className="h-12 w-12 mb-4" />
-                <p>Aucune dépense pour {selectedMonthName}</p>
+                <p>
+                  Aucune dépense pour {selectedMonthName} {selectedYear}
+                </p>
                 <p className="text-sm mt-2">Aucune transaction ce mois-ci</p>
               </div>
             )}
@@ -794,7 +832,6 @@ export default function RapportPage() {
         </Card>
       </div>
 
-      {/* Le reste du code reste inchangé... */}
       {/* STATISTIQUES DES ACTIFS ET DETAILS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* STATUT DES ACTIFS */}
@@ -802,7 +839,7 @@ export default function RapportPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-purple-600" />
-              Statut des Actifs
+              Statut des Actifs ({selectedYear})
             </CardTitle>
           </CardHeader>
           <CardContent>
