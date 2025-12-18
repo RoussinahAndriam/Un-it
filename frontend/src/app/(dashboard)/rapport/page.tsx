@@ -563,15 +563,15 @@ export default function RapportPage() {
                 Exporter
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-48 bg-white border rounded-lg shadow-lg p-2">
+             <PopoverContent className="w-48 bg-white border rounded-lg shadow-lg p-2">
               <div className="flex flex-col space-y-1">
-                <Button
+                {/* <Button
                   variant="ghost"
                   className="justify-start px-3 py-2 hover:bg-blue-50 rounded"
                   onClick={exportExcel}
                 >
                   📊 Excel
-                </Button>
+                </Button> */}
                 <Button
                   variant="ghost"
                   className="justify-start px-3 py-2 hover:bg-blue-50 rounded"
@@ -579,13 +579,13 @@ export default function RapportPage() {
                 >
                   📄 PDF
                 </Button>
-                <Button
+                {/* <Button
                   variant="ghost"
                   className="justify-start px-3 py-2 hover:bg-blue-50 rounded"
                   onClick={exportBoth}
                 >
                   📦 Les deux formats
-                </Button>
+                </Button> */}
               </div>
             </PopoverContent>
           </Popover>

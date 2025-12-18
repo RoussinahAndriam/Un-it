@@ -41,6 +41,9 @@ import {
   SmartphoneNfc,
   Search,
   Filter,
+  CheckCircle,
+  AlertTriangle,
+  Info,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -59,6 +62,90 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCurrency } from "@/constants";
+
+// Composant de notification
+const Notification = ({
+  type,
+  title,
+  message,
+  onClose,
+}: {
+  type: "success" | "error" | "warning" | "info";
+  title: string;
+  message: string;
+  onClose: () => void;
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onClose, 300);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  if (!isVisible) return null;
+
+  const colors = {
+    success: {
+      bg: "bg-green-50",
+      border: "border-green-200",
+      text: "text-green-800",
+      icon: "text-green-500",
+    },
+    error: {
+      bg: "bg-red-50",
+      border: "border-red-200",
+      text: "text-red-800",
+      icon: "text-red-500",
+    },
+    warning: {
+      bg: "bg-yellow-50",
+      border: "border-yellow-200",
+      text: "text-yellow-800",
+      icon: "text-yellow-500",
+    },
+    info: {
+      bg: "bg-blue-50",
+      border: "border-blue-200",
+      text: "text-blue-800",
+      icon: "text-blue-500",
+    },
+  };
+
+  const icons = {
+    success: <CheckCircle className="h-5 w-5" />,
+    error: <AlertTriangle className="h-5 w-5" />,
+    warning: <AlertTriangle className="h-5 w-5" />,
+    info: <Info className="h-5 w-5" />,
+  };
+
+  const color = colors[type];
+
+  return (
+    <div
+      className={`fixed top-4 right-4 z-[100] w-96 p-4 rounded-lg border shadow-lg animate-slide-in ${color.bg} ${color.border}`}
+    >
+      <div className="flex items-start">
+        <div className={`flex-shrink-0 ${color.icon}`}>{icons[type]}</div>
+        <div className="ml-3 flex-1">
+          <h3 className={`text-sm font-medium ${color.text}`}>{title}</h3>
+          <div className="mt-1 text-sm opacity-90">{message}</div>
+        </div>
+        <button
+          onClick={() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+          }}
+          className="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // Fonctions utilitaires pour les types de compte
 const getAccountTypeIcon = (type: AccountType) => {
@@ -104,6 +191,16 @@ export default function AccountPage() {
     getTotalBalance,
   } = useAccount();
 
+  // États pour les notifications
+  const [notifications, setNotifications] = useState<
+    Array<{
+      id: number;
+      type: "success" | "error" | "warning" | "info";
+      title: string;
+      message: string;
+    }>
+  >([]);
+
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -126,6 +223,22 @@ export default function AccountPage() {
     balance: 0,
     currency: "MGA",
   });
+
+  // Fonction pour ajouter des notifications
+  const addNotification = (
+    type: "success" | "error" | "warning" | "info",
+    title: string,
+    message: string
+  ) => {
+    const id = Date.now();
+    setNotifications((prev) => [...prev, { id, type, title, message }]);
+    return id;
+  };
+
+  // Fonction pour supprimer des notifications
+  const removeNotification = (id: number) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>): void => {
     const { name, value } = e.target;
@@ -150,13 +263,33 @@ export default function AccountPage() {
     try {
       if (isEditMode && selectedAccount) {
         await updateAccount(selectedAccount.id, formData);
+        // Notification de succès pour la modification
+        addNotification(
+          "success",
+          "Compte modifié",
+          `Le compte "${formData.name}" a été modifié avec succès`
+        );
       } else {
         await createAccount(formData);
+        // Notification de succès pour la création
+        addNotification(
+          "success",
+          "Compte créé",
+          `Le compte "${formData.name}" a été créé avec succès`
+        );
       }
       resetForm();
       setIsPopoverOpen(false);
     } catch (err) {
       console.error("Erreur lors de l'opération :", err);
+      // Notification d'erreur
+      addNotification(
+        "error",
+        "Erreur",
+        isEditMode
+          ? "Impossible de modifier le compte"
+          : "Impossible de créer le compte"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -197,10 +330,18 @@ export default function AccountPage() {
       clearError();
       try {
         await deleteAccount(accountToDelete.id);
+        // Notification de succès pour la suppression
+        addNotification(
+          "success",
+          "Compte supprimé",
+          `Le compte "${accountToDelete.name}" a été supprimé avec succès`
+        );
         setIsDeleteModalOpen(false);
         setAccountToDelete(null);
       } catch (err) {
         console.error("Erreur lors de la suppression :", err);
+        // Notification d'erreur
+        addNotification("error", "Erreur", "Impossible de supprimer le compte");
       } finally {
         setDeleting(false);
       }
@@ -209,23 +350,8 @@ export default function AccountPage() {
 
   // Fonction pour supprimer depuis le modal de détails
   const handleDeleteFromDetails = async (account: Account) => {
-    if (
-      confirm(
-        "Êtes-vous sûr de vouloir supprimer ce compte ? Cette action est irréversible."
-      )
-    ) {
-      setDeleting(true);
-      clearError();
-      try {
-        await deleteAccount(account.id);
-        setIsDetailsModalOpen(false);
-        setSelectedAccount(null);
-      } catch (err) {
-        console.error("Erreur lors de la suppression :", err);
-      } finally {
-        setDeleting(false);
-      }
-    }
+    setAccountToDelete(account);
+    setIsDeleteModalOpen(true);
   };
 
   const resetForm = () => {
@@ -350,6 +476,17 @@ export default function AccountPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
+      {/* Afficher les notifications */}
+      {notifications.map((notification) => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       {/* Overlay blur lorsque le popover est ouvert */}
       {isPopoverOpen && (
         <div className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40" />
@@ -478,6 +615,11 @@ export default function AccountPage() {
                   onClick={() => {
                     setIsPopoverOpen(false);
                     resetForm();
+                    addNotification(
+                      "info",
+                      "Action annulée",
+                      isEditMode ? "Modification annulée" : "Création annulée"
+                    );
                   }}
                   className="flex-1"
                   disabled={submitting}
@@ -603,7 +745,14 @@ export default function AccountPage() {
               {(searchQuery || typeFilter !== "all" || sortBy !== "name") && (
                 <Button
                   variant="outline"
-                  onClick={resetFilters}
+                  onClick={() => {
+                    resetFilters();
+                    addNotification(
+                      "info",
+                      "Filtres réinitialisés",
+                      "Tous les filtres ont été réinitialisés"
+                    );
+                  }}
                   className="whitespace-nowrap"
                 >
                   Réinitialiser
@@ -735,7 +884,16 @@ export default function AccountPage() {
                     className="flex justify-between items-center pt-2"
                     onClick={(e) => e.stopPropagation()}
                   >
-                   
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewDetails(account)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      disabled={editingAccountId === account.id || deleting}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Détails
+                    </Button>
 
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -803,6 +961,11 @@ export default function AccountPage() {
                     setIsPopoverOpen(true);
                   } else {
                     resetFilters();
+                    addNotification(
+                      "info",
+                      "Filtres réinitialisés",
+                      "Tous les filtres ont été réinitialisés"
+                    );
                   }
                 }}
                 className="bg-blue-600 hover:bg-blue-700"
@@ -835,7 +998,14 @@ export default function AccountPage() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setIsDeleteModalOpen(false)}
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                addNotification(
+                  "info",
+                  "Suppression annulée",
+                  "Le compte n'a pas été supprimé"
+                );
+              }}
               disabled={deleting}
             >
               Annuler
@@ -869,7 +1039,13 @@ export default function AccountPage() {
                   Informations complètes sur ce compte financier
                 </DialogDescription>
               </div>
-             
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsDetailsModalOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </DialogHeader>
 
@@ -994,7 +1170,13 @@ export default function AccountPage() {
                   )}
                   Supprimer
                 </Button>
-                
+                <Button
+                  variant="outline"
+                  onClick={() => setIsDetailsModalOpen(false)}
+                  className="flex-1"
+                >
+                  Fermer
+                </Button>
               </div>
             </div>
           )}

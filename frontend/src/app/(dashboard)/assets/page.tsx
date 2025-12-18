@@ -74,6 +74,72 @@ import { formatCurrency } from "@/constants";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 
+// Composant de notification personnalisé
+const Notification = ({ 
+  type, 
+  title, 
+  message, 
+  onClose 
+}: { 
+  type: 'success' | 'error' | 'warning' | 'info';
+  title: string;
+  message: string;
+  onClose: () => void;
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onClose, 300);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  if (!isVisible) return null;
+
+  const colors = {
+    success: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', icon: 'text-green-500' },
+    error: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', icon: 'text-red-500' },
+    warning: { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800', icon: 'text-yellow-500' },
+    info: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', icon: 'text-blue-500' },
+  };
+
+  const icons = {
+    success: <CheckCircle className="h-5 w-5" />,
+    error: <AlertCircle className="h-5 w-5" />,
+    warning: <AlertTriangle className="h-5 w-5" />,
+    info: <FileText className="h-5 w-5" />,
+  };
+
+  const color = colors[type];
+
+  return (
+    <div className={`fixed top-4 right-4 z-[100] w-96 p-4 rounded-lg border shadow-lg animate-slide-in ${color.bg} ${color.border}`}>
+      <div className="flex items-start">
+        <div className={`flex-shrink-0 ${color.icon}`}>
+          {icons[type]}
+        </div>
+        <div className="ml-3 flex-1">
+          <h3 className={`text-sm font-medium ${color.text}`}>
+            {title}
+          </h3>
+          <div className="mt-1 text-sm opacity-90">{message}</div>
+        </div>
+        <button
+          onClick={() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+          }}
+          className="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "Non définie";
   return new Date(dateString).toLocaleDateString("fr-FR", {
@@ -286,7 +352,7 @@ const AssetDetailDialog = ({
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-1  gap-6">
+        <div className="grid grid-cols-1 gap-6">
           {/* Section gauche : Informations principales */}
           <div className="lg:col-span-2 space-y-4">
             {/* Statut et Localisation */}
@@ -306,7 +372,7 @@ const AssetDetailDialog = ({
                   <Badge className={getLocationColor(asset.location)}>
                     {getLocationLabel(asset.location)}
                   </Badge>
-                  <div>
+                  <div className="mt-2">
                     <Badge className={getStatusColor(asset.status)}>
                       {getStatusLabel(asset.status)}
                     </Badge>
@@ -334,7 +400,7 @@ const AssetDetailDialog = ({
             {/* Informations financières */}
             <Card>
               <CardHeader>
-                <CardTitle className="items-center gap-4 text-lg">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <DollarSign className="h-5 w-5" />
                   Informations financières
                 </CardTitle>
@@ -366,7 +432,7 @@ const AssetDetailDialog = ({
             {/* Informations techniques */}
             <Card>
               <CardHeader>
-                <CardTitle className=" items-center gap-4 text-lg">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Settings className="h-5 w-5" />
                   Informations techniques
                 </CardTitle>
@@ -410,7 +476,7 @@ const AssetDetailDialog = ({
               <CardContent className="space-y-3">
                 <Button
                   onClick={onEdit}
-                  className="w-full justify-start gap-2   text-blue-600"
+                  className="w-full justify-start gap-2 text-blue-600"
                   variant="outline"
                 >
                   <Edit className="h-4 w-4" />
@@ -720,6 +786,14 @@ export default function AssetsPage() {
   );
   const [filters, setFilters] = useState<AssetFilters>({});
   const [balanceError, setBalanceError] = useState<string | null>(null);
+  
+  // États pour les notifications
+  const [notifications, setNotifications] = useState<Array<{
+    id: number;
+    type: 'success' | 'error' | 'warning' | 'info';
+    title: string;
+    message: string;
+  }>>([]);
 
   const [formData, setFormData] = useState<CreateAssetData>({
     name: "",
@@ -731,6 +805,18 @@ export default function AssetsPage() {
     location: "en_stock",
     account_id: undefined,
   });
+
+  // Fonction pour ajouter des notifications
+  const addNotification = (type: 'success' | 'error' | 'warning' | 'info', title: string, message: string) => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, type, title, message }]);
+    return id;
+  };
+
+  // Fonction pour supprimer des notifications
+  const removeNotification = (id: number) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   useEffect(() => {
     fetchAssets(filters);
@@ -777,10 +863,15 @@ export default function AssetsPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    console.log("Form data being submitted:", formData);
+    
+    // Validation avant soumission
+    if (!formData.name.trim()) {
+      addNotification('error', 'Erreur de validation', 'Le nom de l\'actif est requis');
+      return;
+    }
 
     if (balanceError) {
-      alert("Veuillez vérifier le solde du compte sélectionné");
+      addNotification('error', 'Erreur financière', 'Solde du compte insuffisant');
       return;
     }
 
@@ -789,16 +880,47 @@ export default function AssetsPage() {
 
     try {
       if (isEditMode && selectedAsset) {
-        console.log("Updating asset:", selectedAsset.id, formData);
+        // Demander confirmation pour modification
+        const confirmed = window.confirm(
+          "Êtes-vous sûr de vouloir modifier cet actif ?"
+        );
+        
+        if (!confirmed) {
+          addNotification('warning', 'Modification annulée', 'L\'actif n\'a pas été modifié');
+          setSubmitting(false);
+          return;
+        }
+
         await updateAsset(selectedAsset.id, formData);
+        
+        // Notification de succès
+        addNotification(
+          'success',
+          'Actif modifié',
+          `L'actif "${formData.name}" a été mis à jour avec succès`
+        );
       } else {
+        // Création d'un nouvel actif
         await createAsset(formData);
+        
+        // Notification de succès
+        addNotification(
+          'success',
+          'Actif créé',
+          `L'actif "${formData.name}" a été ajouté à l'inventaire`
+        );
       }
+      
       resetForm();
       setIsFormDialogOpen(false);
       setIsDetailDialogOpen(false);
     } catch (err: any) {
       console.error("Erreur:", err);
+      addNotification(
+        'error', 
+        'Erreur', 
+        err.response?.data?.message || `Impossible de ${isEditMode ? 'modifier' : 'créer'} l'actif`
+      );
     } finally {
       setSubmitting(false);
     }
@@ -821,14 +943,12 @@ export default function AssetsPage() {
   };
 
   const handleCardClick = (asset: any) => {
-    console.log("Card clicked:", asset);
     setSelectedAsset(asset);
     setIsDetailDialogOpen(true);
   };
 
   const handleEditFromDetail = () => {
     if (selectedAsset) {
-      console.log("Editing from detail:", selectedAsset);
       setFormData({
         name: selectedAsset.name,
         description: selectedAsset.description || "",
@@ -847,15 +967,86 @@ export default function AssetsPage() {
 
   const handleDeleteFromDetail = () => {
     if (selectedAsset) {
-      if (
-        window.confirm(
-          `Êtes-vous sûr de vouloir supprimer l'actif "${selectedAsset.name}" ? Cette action est irréversible.`
-        )
-      ) {
+      // Demander confirmation pour suppression
+      const confirmed = window.confirm(
+        `Êtes-vous sûr de vouloir supprimer l'actif "${selectedAsset.name}" ? Cette action est irréversible.`
+      );
+      
+      if (!confirmed) {
+        addNotification('warning', 'Suppression annulée', 'L\'actif n\'a pas été supprimé');
+        return;
+      }
+
+      try {
         deleteAsset(selectedAsset.id);
+        
+        // Notification de succès
+        addNotification(
+          'success',
+          'Actif supprimé',
+          `L'actif "${selectedAsset.name}" a été supprimé de l'inventaire`
+        );
+        
         setIsDetailDialogOpen(false);
+      } catch (err) {
+        addNotification('error', 'Erreur', 'Impossible de supprimer l\'actif');
       }
     }
+  };
+
+  const handleDeleteAsset = (asset: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    // Demander confirmation
+    const confirmed = window.confirm(
+      `Êtes-vous sûr de vouloir supprimer l'actif "${asset.name}" ?`
+    );
+    
+    if (!confirmed) {
+      addNotification('warning', 'Suppression annulée', 'L\'actif n\'a pas été supprimé');
+      return;
+    }
+
+    try {
+      deleteAsset(asset.id);
+      
+      // Notification de succès
+      addNotification(
+        'success',
+        'Actif supprimé',
+        `L'actif "${asset.name}" a été supprimé de l'inventaire`
+      );
+    } catch (err) {
+      addNotification('error', 'Erreur', 'Impossible de supprimer l\'actif');
+    }
+  };
+
+  const handleEditAsset = (asset: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Demander confirmation pour modification
+    const confirmed = window.confirm(
+      "Modifier cet actif ?"
+    );
+    
+    if (!confirmed) {
+      addNotification('info', 'Modification annulée', 'Vous pouvez continuer à voir les détails');
+      return;
+    }
+
+    setSelectedAsset(asset);
+    setFormData({
+      name: asset.name,
+      description: asset.description || "",
+      serial_number: asset.serial_number || "",
+      acquisition_date: asset.acquisition_date || "",
+      acquisition_value: asset.acquisition_value || 0,
+      status: asset.status,
+      location: asset.location,
+      account_id: asset.account_id || undefined,
+    });
+    setIsEditMode(true);
+    setIsFormDialogOpen(true);
   };
 
   const getAccountInfo = (accountId: number | null | undefined) => {
@@ -867,6 +1058,17 @@ export default function AssetsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
+      {/* Afficher les notifications */}
+      {notifications.map((notification) => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Actifs Matériels</h1>
@@ -903,8 +1105,13 @@ export default function AssetsPage() {
         submitting={submitting}
         handleSubmit={handleSubmit}
         resetForm={() => {
-          resetForm();
-          setIsFormDialogOpen(false);
+          const confirmed = window.confirm(
+            "Annuler l'opération ? Les modifications non sauvegardées seront perdues."
+          );
+          if (confirmed) {
+            resetForm();
+            setIsFormDialogOpen(false);
+          }
         }}
       />
 
@@ -1137,38 +1344,14 @@ export default function AssetsPage() {
                           Voir les détails
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedAsset(asset);
-                            setFormData({
-                              name: asset.name,
-                              description: asset.description || "",
-                              serial_number: asset.serial_number || "",
-                              acquisition_date: asset.acquisition_date || "",
-                              acquisition_value: asset.acquisition_value || 0,
-                              status: asset.status,
-                              location: asset.location,
-                              account_id: asset.account_id || undefined,
-                            });
-                            setIsEditMode(true);
-                            setIsFormDialogOpen(true);
-                          }}
+                          onClick={(e) => handleEditAsset(asset, e)}
                         >
                           <Edit className="h-4 w-4 mr-2" />
                           Modifier
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           className="text-red-600"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (
-                              window.confirm(
-                                "Êtes-vous sûr de vouloir supprimer cet actif ?"
-                              )
-                            ) {
-                              deleteAsset(asset.id);
-                            }
-                          }}
+                          onClick={(e) => handleDeleteAsset(asset, e)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Supprimer

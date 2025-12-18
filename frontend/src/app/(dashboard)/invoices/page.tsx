@@ -42,6 +42,10 @@ import {
   AlertTriangle,
   Clock,
   QrCode,
+  Bell,
+  Calendar,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { formatCurrency } from "@/constants";
 import { Input } from "@/components/ui/input";
@@ -53,6 +57,90 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useRouter } from "next/navigation";
+
+// Composant de notification personnalisé
+const Notification = ({
+  type,
+  title,
+  message,
+  onClose,
+}: {
+  type: "success" | "error" | "warning" | "info";
+  title: string;
+  message: string;
+  onClose: () => void;
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onClose, 300);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  if (!isVisible) return null;
+
+  const colors = {
+    success: {
+      bg: "bg-green-50",
+      border: "border-green-200",
+      text: "text-green-800",
+      icon: "text-green-500",
+    },
+    error: {
+      bg: "bg-red-50",
+      border: "border-red-200",
+      text: "text-red-800",
+      icon: "text-red-500",
+    },
+    warning: {
+      bg: "bg-yellow-50",
+      border: "border-yellow-200",
+      text: "text-yellow-800",
+      icon: "text-yellow-500",
+    },
+    info: {
+      bg: "bg-blue-50",
+      border: "border-blue-200",
+      text: "text-blue-800",
+      icon: "text-blue-500",
+    },
+  };
+
+  const icons = {
+    success: <CheckCircle className="h-5 w-5" />,
+    error: <AlertCircle className="h-5 w-5" />,
+    warning: <AlertTriangle className="h-5 w-5" />,
+    info: <Bell className="h-5 w-5" />,
+  };
+
+  const color = colors[type];
+
+  return (
+    <div
+      className={`fixed top-4 right-4 z-[100] w-96 p-4 rounded-lg border shadow-lg animate-slide-in ${color.bg} ${color.border}`}
+    >
+      <div className="flex items-start">
+        <div className={`flex-shrink-0 ${color.icon}`}>{icons[type]}</div>
+        <div className="ml-3 flex-1">
+          <h3 className={`text-sm font-medium ${color.text}`}>{title}</h3>
+          <div className="mt-1 text-sm opacity-90">{message}</div>
+        </div>
+        <button
+          onClick={() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+          }}
+          className="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 export default function FacturationPage() {
   const {
@@ -89,6 +177,16 @@ export default function FacturationPage() {
     null
   );
 
+  // États pour les notifications
+  const [notifications, setNotifications] = useState<
+    Array<{
+      id: number;
+      type: "success" | "error" | "warning" | "info";
+      title: string;
+      message: string;
+    }>
+  >([]);
+
   // États pour la recherche et les filtres des factures
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -113,6 +211,22 @@ export default function FacturationPage() {
   const error = invoicesError || thirdPartiesError;
   const loading = invoicesLoading || thirdPartiesLoading;
 
+  // Fonction pour ajouter des notifications
+  const addNotification = (
+    type: "success" | "error" | "warning" | "info",
+    title: string,
+    message: string
+  ) => {
+    const id = Date.now();
+    setNotifications((prev) => [...prev, { id, type, title, message }]);
+    return id;
+  };
+
+  // Fonction pour supprimer des notifications
+  const removeNotification = (id: number) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   // Chargement initial
   useEffect(() => {
     fetchInvoices({});
@@ -121,9 +235,35 @@ export default function FacturationPage() {
 
   const handleCreateInvoice = async (data: Partial<Invoice>) => {
     try {
+      // Vérification avant création
+      if (!data.third_party_id) {
+        addNotification("error", "Erreur", "Veuillez sélectionner un tiers");
+        return;
+      }
+
+      // Demander confirmation pour statut "envoye"
+      if (data.status === "envoye") {
+        const confirmed = window.confirm(
+          "Voulez-vous créer et envoyer cette facture immédiatement ?"
+        );
+        if (!confirmed) return;
+      }
+
       const createdInvoice = await createInvoice(data);
 
+      // Notification de succès
+      addNotification(
+        "success",
+        "Facture créée",
+        `La facture ${createdInvoice.invoice_number} a été créée avec succès`
+      );
+
       if (data.status === "paye" || data.status === "partiellement_paye") {
+        addNotification(
+          "info",
+          "Paiement recommandé",
+          "Ajoutez un paiement pour compléter l'enregistrement"
+        );
         setSelectedInvoice(createdInvoice);
         setShowPaymentForm(true);
       }
@@ -136,80 +276,319 @@ export default function FacturationPage() {
       fetchInvoices({});
     } catch (err) {
       console.error("Error creating invoice:", err);
+      addNotification("error", "Erreur", "Impossible de créer la facture");
     }
   };
 
   const handleUpdateInvoice = async (data: Partial<Invoice>) => {
-    if (editingInvoice) {
-      try {
-        await updateInvoice(editingInvoice.id, data);
+    if (!editingInvoice) return;
 
-        if (data.status === "envoye") {
+    // Demander confirmation avant modification
+    const importantChanges = [
+      {
+        field: "total_amount",
+        old: editingInvoice.total_amount,
+        new: data.total_amount,
+      },
+      { field: "due_date", old: editingInvoice.due_date, new: data.due_date },
+      { field: "status", old: editingInvoice.status, new: data.status },
+    ].filter((change) => change.new !== undefined && change.new !== change.old);
+
+    if (importantChanges.length > 0) {
+      const changeText = importantChanges
+        .map((change) => `${change.field}: ${change.old} → ${change.new}`)
+        .join("\n");
+
+      const confirmed = window.confirm(
+        `Vous modifiez des informations importantes :\n\n${changeText}\n\nContinuer ?`
+      );
+      if (!confirmed) {
+        addNotification(
+          "warning",
+          "Modification annulée",
+          "La facture n'a pas été modifiée"
+        );
+        return;
+      }
+    }
+
+    try {
+      await updateInvoice(editingInvoice.id, data);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Facture modifiée",
+        `La facture ${editingInvoice.invoice_number} a été mise à jour`
+      );
+
+      if (data.status === "envoye" && editingInvoice.status !== "envoye") {
+        const sendNow = window.confirm(
+          `Voulez-vous envoyer la facture ${editingInvoice.invoice_number} par email maintenant ?`
+        );
+        if (sendNow) {
           await sendInvoice(editingInvoice.id);
         }
-
-        setEditingInvoice(null);
-        fetchInvoices({});
-      } catch (err) {
-        console.error("Error updating invoice:", err);
       }
+
+      setEditingInvoice(null);
+      fetchInvoices({});
+    } catch (err) {
+      console.error("Error updating invoice:", err);
+      addNotification("error", "Erreur", "Impossible de modifier la facture");
     }
   };
 
   const handleCreateThirdParty = async (data: Partial<ThirdParty>) => {
     try {
+      if (!data.name) {
+        addNotification("error", "Erreur", "Le nom du tiers est requis");
+        return;
+      }
+
       await createThirdParty(data);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Tiers créé",
+        `Le tiers "${data.name}" a été créé avec succès`
+      );
+
       setShowThirdPartyForm(false);
       fetchThirdParties();
     } catch (err) {
       console.error("Error creating third party:", err);
+      addNotification("error", "Erreur", "Impossible de créer le tiers");
     }
   };
 
   const handleUpdateThirdParty = async (data: Partial<ThirdParty>) => {
-    if (editingThirdParty) {
-      try {
-        await updateThirdParty(editingThirdParty.id, data);
-        setEditingThirdParty(null);
-        fetchThirdParties();
-      } catch (err) {
-        console.error("Error updating third party:", err);
-      }
+    if (!editingThirdParty) return;
+
+    // Demander confirmation
+    const confirmed = window.confirm(
+      "Êtes-vous sûr de vouloir modifier ce tiers ?"
+    );
+    if (!confirmed) {
+      addNotification(
+        "warning",
+        "Modification annulée",
+        "Le tiers n'a pas été modifié"
+      );
+      return;
+    }
+
+    try {
+      await updateThirdParty(editingThirdParty.id, data);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Tiers modifié",
+        `Le tiers "${editingThirdParty.name}" a été mis à jour`
+      );
+
+      setEditingThirdParty(null);
+      fetchThirdParties();
+    } catch (err) {
+      console.error("Error updating third party:", err);
+      addNotification("error", "Erreur", "Impossible de modifier le tiers");
     }
   };
 
   const handleDeleteInvoice = async (id: number) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer cette facture ?")) {
+    const invoice = invoices.find((inv) => inv.id === id);
+    if (!invoice) {
+      addNotification("error", "Erreur", "Facture non trouvée");
+      return;
+    }
+
+    // Vérifications
+    if (invoice.status === "paye" || invoice.status === "partiellement_paye") {
+      addNotification(
+        "error",
+        "Suppression impossible",
+        "Impossible de supprimer une facture avec des paiements"
+      );
+      return;
+    }
+
+    let confirmMessage = `Êtes-vous sûr de vouloir supprimer la facture ${invoice.invoice_number} ?`;
+
+    if (invoice.status === "envoye") {
+      confirmMessage = `ATTENTION : Cette facture a déjà été envoyée au client ${invoice.third_party?.name}. Voulez-vous vraiment la supprimer ?`;
+    }
+
+    if (invoice.total_amount > 1000) {
+      confirmMessage = `ATTENTION : Cette facture a un montant de ${formatCurrency(
+        invoice.total_amount
+      )}. Êtes-vous absolument sûr de vouloir la supprimer ?`;
+    }
+
+    if (!window.confirm(confirmMessage)) {
+      addNotification(
+        "warning",
+        "Suppression annulée",
+        "La facture n'a pas été supprimée"
+      );
+      return;
+    }
+
+    try {
       await deleteInvoice(id);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Facture supprimée",
+        `La facture ${invoice.invoice_number} a été supprimée`
+      );
+
       fetchInvoices({});
+    } catch (err) {
+      console.error("Error deleting invoice:", err);
+      addNotification("error", "Erreur", "Impossible de supprimer la facture");
     }
   };
 
   const handleDeleteThirdParty = async (id: number) => {
-    if (confirm("Êtes-vous sûr de vouloir supprimer ce tiers ?")) {
+    const thirdParty = thirdParties.find((tp) => tp.id === id);
+    if (!thirdParty) {
+      addNotification("error", "Erreur", "Tiers non trouvé");
+      return;
+    }
+
+    // Vérifier si le tiers a des factures
+    const hasInvoices = invoices.some((inv) => inv.third_party_id === id);
+    if (hasInvoices) {
+      addNotification(
+        "error",
+        "Suppression impossible",
+        "Impossible de supprimer un tiers avec des factures associées"
+      );
+      return;
+    }
+
+    if (
+      !confirm(
+        `Êtes-vous sûr de vouloir supprimer le tiers "${thirdParty.name}" ?`
+      )
+    ) {
+      addNotification(
+        "warning",
+        "Suppression annulée",
+        "Le tiers n'a pas été supprimé"
+      );
+      return;
+    }
+
+    try {
       await deleteThirdParty(id);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Tiers supprimé",
+        `Le tiers "${thirdParty.name}" a été supprimé`
+      );
+
       fetchThirdParties();
+    } catch (err) {
+      console.error("Error deleting third party:", err);
+      addNotification("error", "Erreur", "Impossible de supprimer le tiers");
     }
   };
 
   const handleSendInvoice = async (id: number) => {
-    if (confirm("Envoyer cette facture par email ?")) {
+    const invoice = invoices.find((inv) => inv.id === id);
+    if (!invoice) {
+      addNotification("error", "Erreur", "Facture non trouvée");
+      return;
+    }
+
+    // Vérifier l'email
+    if (!invoice.third_party?.email) {
+      addNotification(
+        "error",
+        "Email manquant",
+        "Le client n'a pas d'email renseigné"
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Envoyer la facture ${invoice.invoice_number} à ${invoice.third_party.email} ?`
+    );
+
+    if (!confirmed) {
+      addNotification(
+        "warning",
+        "Envoi annulé",
+        "La facture n'a pas été envoyée"
+      );
+      return;
+    }
+
+    try {
       await sendInvoice(id);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Facture envoyée",
+        `La facture a été envoyée à ${invoice.third_party.email}`
+      );
+
       fetchInvoices({});
+    } catch (err) {
+      console.error("Error sending invoice:", err);
+      addNotification("error", "Erreur", "Impossible d'envoyer la facture");
     }
   };
 
   const handleAddPayment = async (invoiceId: number, paymentData: any) => {
+    const invoice = invoices.find((inv) => inv.id === invoiceId);
+    if (!invoice) {
+      addNotification("error", "Erreur", "Facture non trouvée");
+      return;
+    }
+
+    // Vérifier le montant
+    const remainingAmount = invoice.total_amount - invoice.amount_paid;
+    if (paymentData.amount > remainingAmount) {
+      addNotification(
+        "error",
+        "Montant invalide",
+        `Le paiement dépasse le montant restant (${remainingAmount}€)`
+      );
+      return;
+    }
+
     try {
       await addPayment(invoiceId, paymentData);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Paiement enregistré",
+        `Paiement de ${paymentData.amount}€ enregistré pour la facture ${invoice.invoice_number}`
+      );
+
       setShowPaymentForm(false);
       setSelectedInvoice(null);
       fetchInvoices({});
     } catch (err) {
       console.error("Error adding payment:", err);
+      addNotification(
+        "error",
+        "Erreur",
+        "Impossible d'enregistrer le paiement"
+      );
     }
   };
 
+  // Fonctions utilitaires existantes
   const getStatusColor = (status: string) => {
     switch (status) {
       case "brouillon":
@@ -250,24 +629,31 @@ export default function FacturationPage() {
     return type === "client" ? "default" : "secondary";
   };
 
-  // Fonction pour réinitialiser tous les filtres des factures
   const resetInvoiceFilters = () => {
     setSearchQuery("");
     setStatusFilter("all");
     setTypeFilter("all");
     setSortBy("issue_date");
     setSortOrder("desc");
+    addNotification(
+      "info",
+      "Filtres réinitialisés",
+      "Tous les filtres ont été réinitialisés"
+    );
   };
 
-  // Fonction pour réinitialiser tous les filtres des tiers
   const resetThirdPartyFilters = () => {
     setThirdPartySearchQuery("");
     setThirdPartyTypeFilter("all");
     setThirdPartySortBy("name");
     setThirdPartySortOrder("asc");
+    addNotification(
+      "info",
+      "Filtres réinitialisés",
+      "Tous les filtres ont été réinitialisés"
+    );
   };
 
-  // Fonction pour générer un QR Code de paiement
   const generatePaymentQRCode = (invoice: Invoice) => {
     const paymentData = {
       invoiceId: invoice.id,
@@ -420,7 +806,6 @@ Référence: FACT-${invoice.invoice_number}`;
     return filteredAndSortedInvoices.reduce((sum, invoice) => {
       const raw = String(invoice.total_amount ?? "0").replace(/[^\d.-]/g, "");
       const balance = Number(raw);
-
       return sum + (isNaN(balance) ? 0 : balance);
     }, 0);
   }, [filteredAndSortedInvoices]);
@@ -429,7 +814,6 @@ Référence: FACT-${invoice.invoice_number}`;
     return filteredAndSortedInvoices.reduce((sum, invoice) => {
       const raw = String(invoice.amount_paid ?? "0").replace(/[^\d.-]/g, "");
       const balance = Number(raw);
-
       return sum + (isNaN(balance) ? 0 : balance);
     }, 0);
   }, [filteredAndSortedInvoices]);
@@ -477,6 +861,17 @@ Référence: FACT-${invoice.invoice_number}`;
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Afficher les notifications */}
+      {notifications.map((notification) => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">Gestion de la Facturation</h1>
@@ -770,7 +1165,6 @@ Référence: FACT-${invoice.invoice_number}`;
 
                                   {invoice.type === "client" && (
                                     <>
-                                      {/* {invoice.status === "brouillon" && ( */}
                                       <DropdownMenuItem
                                         onClick={() =>
                                           handleSendInvoice(invoice.id)
@@ -779,7 +1173,6 @@ Référence: FACT-${invoice.invoice_number}`;
                                         <Send className="h-4 w-4 mr-2" />
                                         Envoyer
                                       </DropdownMenuItem>
-                                      {/* )} */}
                                     </>
                                   )}
 
@@ -1035,7 +1428,12 @@ Référence: FACT-${invoice.invoice_number}`;
             <CardContent className="overflow-y-auto">
               <InvoiceForm
                 onSubmit={handleCreateInvoice}
-                onCancel={() => setShowInvoiceForm(false)}
+                onCancel={() => {
+                  const confirmed = window.confirm(
+                    "Abandonner la création de la facture ? Les données saisies seront perdues."
+                  );
+                  if (confirmed) setShowInvoiceForm(false);
+                }}
                 loading={invoicesLoading}
               />
             </CardContent>
@@ -1053,7 +1451,12 @@ Référence: FACT-${invoice.invoice_number}`;
               <InvoiceForm
                 invoice={editingInvoice}
                 onSubmit={handleUpdateInvoice}
-                onCancel={() => setEditingInvoice(null)}
+                onCancel={() => {
+                  const confirmed = window.confirm(
+                    "Abandonner les modifications ? Les changements non sauvegardés seront perdus."
+                  );
+                  if (confirmed) setEditingInvoice(null);
+                }}
                 loading={invoicesLoading}
               />
             </CardContent>
@@ -1070,7 +1473,12 @@ Référence: FACT-${invoice.invoice_number}`;
             <CardContent>
               <ThirdPartyForm
                 onSubmit={handleCreateThirdParty}
-                onCancel={() => setShowThirdPartyForm(false)}
+                onCancel={() => {
+                  const confirmed = window.confirm(
+                    "Abandonner la création du tiers ? Les données saisies seront perdues."
+                  );
+                  if (confirmed) setShowThirdPartyForm(false);
+                }}
                 loading={thirdPartiesLoading}
               />
             </CardContent>
@@ -1088,7 +1496,12 @@ Référence: FACT-${invoice.invoice_number}`;
               <ThirdPartyForm
                 thirdParty={editingThirdParty}
                 onSubmit={handleUpdateThirdParty}
-                onCancel={() => setEditingThirdParty(null)}
+                onCancel={() => {
+                  const confirmed = window.confirm(
+                    "Abandonner les modifications ? Les changements non sauvegardés seront perdus."
+                  );
+                  if (confirmed) setEditingThirdParty(null);
+                }}
                 loading={thirdPartiesLoading}
               />
             </CardContent>
@@ -1109,8 +1522,13 @@ Référence: FACT-${invoice.invoice_number}`;
                   handleAddPayment(selectedInvoice.id, paymentData)
                 }
                 onCancel={() => {
-                  setShowPaymentForm(false);
-                  setSelectedInvoice(null);
+                  const confirmed = window.confirm(
+                    "Annuler l'ajout du paiement ?"
+                  );
+                  if (confirmed) {
+                    setShowPaymentForm(false);
+                    setSelectedInvoice(null);
+                  }
                 }}
                 loading={invoicesLoading}
               />
@@ -1185,7 +1603,11 @@ Référence: FACT-${invoice.invoice_number}`;
                     navigator.clipboard.writeText(
                       generatePaymentQRCode(selectedInvoice)
                     );
-                    alert("QR Code copié dans le presse-papier");
+                    addNotification(
+                      "success",
+                      "Copié",
+                      "QR Code copié dans le presse-papier"
+                    );
                   }}
                   variant="outline"
                 >

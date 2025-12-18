@@ -1,4 +1,3 @@
-// app/applications/page.tsx
 "use client";
 
 import { useState, useEffect, FormEvent, ChangeEvent } from "react";
@@ -49,6 +48,9 @@ import {
   Building,
   ExternalLink,
   Wallet,
+  Key,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -56,7 +58,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  
 } from "@/components/ui/dropdown-menu";
 import { formatCurrency } from "@/constants";
 import { toast } from "sonner";
@@ -204,6 +205,15 @@ export default function ApplicationPage() {
           ...prev,
           has_license: checked,
           license_type: checked ? "subscription" : null,
+          // Réinitialiser les champs de licence si on décoche
+          ...(checked
+            ? {}
+            : {
+                current_users: 0,
+                max_users: null,
+                purchase_date: null,
+                renewal_date: null,
+              }),
         }));
       }
       return;
@@ -223,7 +233,7 @@ export default function ApplicationPage() {
   const handleSelectChange = (name: string, value: string) => {
     setFormData((prev) => ({
       ...prev,
-      [name]: value === "null" ? null : value,
+      [name]: value === "" ? null : value,
     }));
   };
 
@@ -233,6 +243,15 @@ export default function ApplicationPage() {
       ...prev,
       has_license: checked,
       license_type: checked ? "subscription" : null,
+      // Réinitialiser les champs de licence si on décoche
+      ...(checked
+        ? {}
+        : {
+            current_users: 0,
+            max_users: null,
+            purchase_date: null,
+            renewal_date: null,
+          }),
     }));
   };
 
@@ -284,7 +303,7 @@ export default function ApplicationPage() {
       cost: application.cost,
       user_id: application.user_id,
       license_type: application.license_type,
-      current_users: application.current_users,
+      current_users: application.current_users || 0,
       max_users: application.max_users,
       purchase_date: application.purchase_date,
       renewal_date: application.renewal_date,
@@ -404,8 +423,14 @@ export default function ApplicationPage() {
     }
 
     // Filtre par compte
+    // Dans la fonction getFilteredApplications
     if (accountFilter !== "all") {
-      filtered = filtered.filter((app) => app.account_id === accountFilter);
+      if (accountFilter === 0) {
+        // Filtre pour les applications sans compte (account_id = null)
+        filtered = filtered.filter((app) => app.account_id === null);
+      } else {
+        filtered = filtered.filter((app) => app.account_id === accountFilter);
+      }
     }
 
     // Filtre par type de création
@@ -537,44 +562,54 @@ export default function ApplicationPage() {
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label
-                  htmlFor="name"
-                  className="text-sm font-medium text-gray-700"
-                >
-                  Nom de l'application *
-                </Label>
-                <Input
-                  id="name"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  placeholder="ex: Microsoft Office"
-                  className="w-full"
-                  required
-                  disabled={submitting}
-                />
-              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="name"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Nom de l'application *
+                  </Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    placeholder="ex: Microsoft Office"
+                    className="w-full"
+                    required
+                    disabled={submitting}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label
-                  htmlFor="cost"
-                  className="text-sm font-medium text-gray-700"
-                >
-                  Coût *
-                </Label>
-                <Input
-                  id="cost"
-                  name="cost"
-                  type="number"
-                  step="0.01"
-                  value={formData.cost || ""}
-                  onChange={handleChange}
-                  placeholder="0"
-                  className="w-full"
-                  required
-                  disabled={submitting}
-                />
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="cost"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Coût
+                  </Label>
+                  <Input
+                    id="cost"
+                    name="cost"
+                    type="number"
+                    step="0.01"
+                    value={formData.cost ?? ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        cost: value === "" ? null : Number(value),
+                      }));
+                    }}
+                    placeholder="Laisser vide pour aucun coût"
+                    className="w-full"
+                    disabled={submitting}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Laissez vide si l'application n'a pas de coût
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -582,19 +617,27 @@ export default function ApplicationPage() {
                   htmlFor="account_id"
                   className="text-sm font-medium text-gray-700"
                 >
-                  Compte associé *
+                  Compte associé
                 </Label>
                 <Select
-                  value={formData.account_id?.toString() || ""}
+                  value={formData.account_id?.toString() || "null"}
                   onValueChange={(value) =>
-                    handleSelectChange("account_id", value)
+                    handleSelectChange(
+                      "account_id",
+                      value === "null" ? "" : value
+                    )
                   }
                   disabled={submitting}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Sélectionnez un compte" />
+                    <SelectValue placeholder="Sélectionnez un compte (optionnel)" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="null">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <span>Aucun compte</span>
+                      </div>
+                    </SelectItem>
                     {accounts.map((account) => (
                       <SelectItem
                         key={account.id}
@@ -612,6 +655,9 @@ export default function ApplicationPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-gray-500">
+                  Optionnel - Vous pouvez associer un compte plus tard
+                </p>
               </div>
 
               {/* Checkbox pour licence */}
@@ -637,7 +683,7 @@ export default function ApplicationPage() {
                     htmlFor="license_type"
                     className="text-sm font-medium text-gray-700"
                   >
-                    Type de licence *
+                    Type de licence
                   </Label>
                   <Select
                     value={formData.license_type || ""}
@@ -664,7 +710,7 @@ export default function ApplicationPage() {
                     htmlFor="status"
                     className="text-sm font-medium text-gray-700"
                   >
-                    Statut *
+                    Statut
                   </Label>
                   <Select
                     value={formData.status}
@@ -685,82 +731,96 @@ export default function ApplicationPage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="current_users"
-                    className="text-sm font-medium text-gray-700"
-                  >
-                    Utilisateurs actuels
-                  </Label>
-                  <Input
-                    id="current_users"
-                    name="current_users"
-                    type="number"
-                    value={formData.current_users || ""}
-                    onChange={handleChange}
-                    placeholder="0"
-                    className="w-full"
-                    disabled={submitting}
-                  />
-                </div>
+                {/* Utilisateurs actuels - Conditionnel */}
+                {hasLicense && (
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="current_users"
+                      className="text-sm font-medium text-gray-700 flex items-center gap-1"
+                    >
+                      <UserCheck className="h-3 w-3" />
+                      Utilisateurs actuels
+                    </Label>
+                    <Input
+                      id="current_users"
+                      name="current_users"
+                      type="number"
+                      value={formData.current_users || ""}
+                      onChange={handleChange}
+                      placeholder="0"
+                      className="w-full"
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="max_users"
-                    className="text-sm font-medium text-gray-700"
-                  >
-                    Utilisateurs max
-                  </Label>
-                  <Input
-                    id="max_users"
-                    name="max_users"
-                    type="number"
-                    value={formData.max_users || ""}
-                    onChange={handleChange}
-                    placeholder="Illimité"
-                    className="w-full"
-                    disabled={submitting}
-                  />
-                </div>
+              {/* Utilisateurs max - Conditionnel */}
+              {hasLicense && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="max_users"
+                      className="text-sm font-medium text-gray-700 flex items-center gap-1"
+                    >
+                      <Users className="h-3 w-3" />
+                      Utilisateurs max
+                    </Label>
+                    <Input
+                      id="max_users"
+                      name="max_users"
+                      type="number"
+                      value={formData.max_users || ""}
+                      onChange={handleChange}
+                      placeholder="Illimité"
+                      className="w-full"
+                      disabled={submitting}
+                    />
+                  </div>
 
+                  {/* Date d'achat - Conditionnel */}
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="purchase_date"
+                      className="text-sm font-medium text-gray-700 flex items-center gap-1"
+                    >
+                      <Calendar className="h-3 w-3" />
+                      Date d'achat
+                    </Label>
+                    <Input
+                      id="purchase_date"
+                      name="purchase_date"
+                      type="date"
+                      value={formData.purchase_date || ""}
+                      onChange={handleChange}
+                      className="w-full"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Date de renouvellement - Conditionnel */}
+              {hasLicense && (
                 <div className="space-y-2">
                   <Label
-                    htmlFor="purchase_date"
-                    className="text-sm font-medium text-gray-700"
+                    htmlFor="renewal_date"
+                    className="text-sm font-medium text-gray-700 flex items-center gap-1"
                   >
-                    Date d'achat
+                    <Calendar className="h-3 w-3" />
+                    Date de renouvellement
                   </Label>
                   <Input
-                    id="purchase_date"
-                    name="purchase_date"
+                    id="renewal_date"
+                    name="renewal_date"
                     type="date"
-                    value={formData.purchase_date || ""}
+                    value={formData.renewal_date || ""}
                     onChange={handleChange}
                     className="w-full"
                     disabled={submitting}
                   />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="renewal_date"
-                  className="text-sm font-medium text-gray-700"
-                >
-                  Date de renouvellement
-                </Label>
-                <Input
-                  id="renewal_date"
-                  name="renewal_date"
-                  type="date"
-                  value={formData.renewal_date || ""}
-                  onChange={handleChange}
-                  className="w-full"
-                  disabled={submitting}
-                />
-              </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <Button
@@ -829,6 +889,8 @@ export default function ApplicationPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tous les comptes</SelectItem>
+              <SelectItem value="0">Aucun compte</SelectItem>{" "}
+              {/* Nouvelle option */}
               {accounts.map((account) => (
                 <SelectItem key={account.id} value={account.id.toString()}>
                   {account.name}
@@ -1007,21 +1069,34 @@ export default function ApplicationPage() {
                         </Badge>
                       </div>
                     )}
-                    <div className="flex justify-between">
-                      <span>Utilisateurs:</span>
-                      <span className="font-medium">
-                        {application.current_users}
-                        {application.max_users && ` / ${application.max_users}`}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Achat:</span>
-                      <span>{formatDate(application.purchase_date)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Renouvellement:</span>
-                      <span>{formatDate(application.renewal_date)}</span>
-                    </div>
+                    {/* Afficher les informations de licence seulement si l'application a une licence */}
+                    {application.license_type ? (
+                      <>
+                        <div className="flex justify-between">
+                          <span>Utilisateurs:</span>
+                          <span className="font-medium">
+                            {application.current_users}
+                            {application.max_users &&
+                              ` / ${application.max_users}`}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Achat:</span>
+                          <span>{formatDate(application.purchase_date)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Renouvellement:</span>
+                          <span>{formatDate(application.renewal_date)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1 text-blue-600">
+                        <Key className="h-3 w-3" />
+                        <span className="text-xs">
+                          Application sans licence
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex justify-between items-center pt-2">
@@ -1198,14 +1273,41 @@ export default function ApplicationPage() {
                       {formatCurrency(selectedApplication.cost)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Utilisateurs</p>
-                    <p className="text-lg font-medium">
-                      {selectedApplication.current_users}
-                      {selectedApplication.max_users &&
-                        ` / ${selectedApplication.max_users}`}
-                    </p>
-                  </div>
+
+                  {/* Afficher les informations de licence seulement si l'application a une licence */}
+                  {selectedApplication.license_type ? (
+                    <>
+                      <div>
+                        <p className="text-sm text-gray-500">Utilisateurs</p>
+                        <p className="text-lg font-medium">
+                          {selectedApplication.current_users}
+                          {selectedApplication.max_users &&
+                            ` / ${selectedApplication.max_users}`}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Date d'achat</p>
+                        <p className="text-lg font-medium">
+                          {formatDate(selectedApplication.purchase_date)}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-2">
+                        <Key className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <p className="font-medium text-blue-800">
+                            Application sans licence
+                          </p>
+                          <p className="text-sm text-blue-600">
+                            Cette application n'a pas de licence externe
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {selectedApplication.account && (
                     <div>
                       <p className="text-sm text-gray-500">Compte associé</p>
@@ -1223,20 +1325,18 @@ export default function ApplicationPage() {
                   )}
                 </div>
                 <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-500">Date d'achat</p>
-                    <p className="text-lg font-medium">
-                      {formatDate(selectedApplication.purchase_date)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">
-                      Date de renouvellement
-                    </p>
-                    <p className="text-lg font-medium">
-                      {formatDate(selectedApplication.renewal_date)}
-                    </p>
-                  </div>
+                  {selectedApplication.license_type && (
+                    <>
+                      <div>
+                        <p className="text-sm text-gray-500">
+                          Date de renouvellement
+                        </p>
+                        <p className="text-lg font-medium">
+                          {formatDate(selectedApplication.renewal_date)}
+                        </p>
+                      </div>
+                    </>
+                  )}
                   <div>
                     <p className="text-sm text-gray-500">Type de création</p>
                     <p className="text-lg font-medium">
@@ -1245,6 +1345,15 @@ export default function ApplicationPage() {
                         : "Externe (Avec licence)"}
                     </p>
                   </div>
+                  {!selectedApplication.license_type && (
+                    <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-sm text-gray-600">
+                        Cette application n'a pas de licence externe. Les champs
+                        utilisateurs, date d'achat et date de renouvellement ne
+                        sont pas applicables.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 

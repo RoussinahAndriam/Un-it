@@ -187,6 +187,111 @@ class InvoiceController extends Controller
     }
 
     /**
+ * Met à jour une facture.
+ */
+public function update(Request $request, Invoice $invoice)
+{
+    try {
+        \Log::info('Updating invoice', [
+            'id' => $invoice->id,
+            'data_received' => $request->all(),
+            'invoice_current' => $invoice->toArray()
+        ]);
+
+        // Valider les données
+        $validated = $request->validate([
+            'invoice_number' => 'sometimes|string|max:50',
+            'type' => 'sometimes|in:client,depense',
+            'third_party_id' => 'sometimes|exists:third_parties,id',
+            'issue_date' => 'sometimes|date_format:Y-m-d',
+            'due_date' => 'sometimes|date_format:Y-m-d',
+            'status' => 'sometimes|in:brouillon,envoye,partiellement_paye,paye,en_retard,annule',
+            'payment_terms' => 'nullable|string',
+            'lines' => 'nullable|array',
+            'lines.*.id' => 'nullable|exists:invoice_lines,id',
+            'lines.*.designation' => 'required_with:lines|string',
+            'lines.*.quantity' => 'required_with:lines|numeric|min:0',
+            'lines.*.unit_price' => 'required_with:lines|numeric|min:0',
+            'lines.*.tax_rate' => 'required_with:lines|numeric|min:0|max:100',
+            'lines.*.discount' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        // Formater les dates si elles existent
+        if (isset($validated['issue_date'])) {
+            // Si la date vient avec le timezone (2025-12-03T00:00:00.000000Z)
+            $issueDate = $validated['issue_date'];
+            if (strpos($issueDate, 'T') !== false) {
+                $validated['issue_date'] = date('Y-m-d', strtotime($issueDate));
+            }
+        }
+
+        if (isset($validated['due_date'])) {
+            $dueDate = $validated['due_date'];
+            if (strpos($dueDate, 'T') !== false) {
+                $validated['due_date'] = date('Y-m-d', strtotime($dueDate));
+            }
+        }
+
+        \Log::info('Validated data after formatting:', $validated);
+
+        DB::beginTransaction();
+
+        // Mettre à jour les informations de base
+        $invoice->update($validated);
+
+        // Mettre à jour les lignes si elles sont fournies
+        if (isset($validated['lines'])) {
+            $subtotal = 0;
+            $tax_amount = 0;
+
+            // Supprimer les anciennes lignes
+            $invoice->lines()->delete();
+
+            // Ajouter les nouvelles lignes
+            foreach ($validated['lines'] as $lineData) {
+                $lineTotal = $lineData['quantity'] * $lineData['unit_price'] * (1 - ($lineData['discount'] ?? 0) / 100);
+                $subtotal += $lineTotal;
+                $tax_amount += $lineTotal * ($lineData['tax_rate'] ?? 0) / 100;
+
+                $invoice->lines()->create($lineData);
+            }
+
+            // Recalculer les totaux
+            $invoice->subtotal = $subtotal;
+            $invoice->tax_amount = $tax_amount;
+            $invoice->total_amount = $subtotal + $tax_amount;
+        }
+
+        $invoice->save();
+
+        DB::commit();
+
+        // Recharger les relations
+        $invoice->load(['thirdParty', 'lines', 'payments', 'documents']);
+
+        return response()->json([
+            'data' => $invoice,
+            'message' => 'Facture mise à jour avec succès.'
+        ], 200);
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        DB::rollBack();
+        \Log::error('Validation error updating invoice: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Erreur de validation',
+            'errors' => $e->errors()
+        ], 422);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Error updating invoice: ' . $e->getMessage());
+        return response()->json([
+            'message' => 'Erreur lors de la mise à jour de la facture',
+            'error' => $e->getMessage(),
+            'trace' => config('app.debug') ? $e->getTrace() : null
+        ], 500);
+    }
+}
+    /**
      * Télécharge un document attaché.
      */
     public function downloadDocument(AttachedDocument $document)

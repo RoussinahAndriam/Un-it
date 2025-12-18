@@ -55,6 +55,90 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
+// Composant de notification personnalisé (identique aux autres pages)
+const Notification = ({
+  type,
+  title,
+  message,
+  onClose,
+}: {
+  type: "success" | "error" | "warning" | "info";
+  title: string;
+  message: string;
+  onClose: () => void;
+}) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onClose, 300);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  if (!isVisible) return null;
+
+  const colors = {
+    success: {
+      bg: "bg-green-50",
+      border: "border-green-200",
+      text: "text-green-800",
+      icon: "text-green-500",
+    },
+    error: {
+      bg: "bg-red-50",
+      border: "border-red-200",
+      text: "text-red-800",
+      icon: "text-red-500",
+    },
+    warning: {
+      bg: "bg-yellow-50",
+      border: "border-yellow-200",
+      text: "text-yellow-800",
+      icon: "text-yellow-500",
+    },
+    info: {
+      bg: "bg-blue-50",
+      border: "border-blue-200",
+      text: "text-blue-800",
+      icon: "text-blue-500",
+    },
+  };
+
+  const icons = {
+    success: <CheckCircle className="h-5 w-5" />,
+    error: <AlertTriangle className="h-5 w-5" />,
+    warning: <AlertTriangle className="h-5 w-5" />,
+    info: <CheckCircle className="h-5 w-5" />,
+  };
+
+  const color = colors[type];
+
+  return (
+    <div
+      className={`fixed top-4 right-4 z-[100] w-96 p-4 rounded-lg border shadow-lg animate-slide-in ${color.bg} ${color.border}`}
+    >
+      <div className="flex items-start">
+        <div className={`flex-shrink-0 ${color.icon}`}>{icons[type]}</div>
+        <div className="ml-3 flex-1">
+          <h3 className={`text-sm font-medium ${color.text}`}>{title}</h3>
+          <div className="mt-1 text-sm opacity-90">{message}</div>
+        </div>
+        <button
+          onClick={() => {
+            setIsVisible(false);
+            setTimeout(onClose, 300);
+          }}
+          className="ml-4 flex-shrink-0 text-gray-400 hover:text-gray-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "Non définie";
   return new Date(dateString).toLocaleDateString("fr-FR");
@@ -282,6 +366,16 @@ export default function EmployeeAssetsPage() {
   const { assets, fetchAssets, getAssetsAvailableForLoan } = useAsset();
   const { users, loading: usersLoading, fetchUsers } = useUser();
 
+  // États pour les notifications
+  const [notifications, setNotifications] = useState<
+    Array<{
+      id: number;
+      type: "success" | "error" | "warning" | "info";
+      title: string;
+      message: string;
+    }>
+  >([]);
+
   const [activeTab, setActiveTab] = useState<LoanStatus | "all" | "overdue">(
     "all"
   );
@@ -303,6 +397,22 @@ export default function EmployeeAssetsPage() {
     signature: "",
   });
 
+  // Fonction pour ajouter des notifications
+  const addNotification = (
+    type: "success" | "error" | "warning" | "info",
+    title: string,
+    message: string
+  ) => {
+    const id = Date.now();
+    setNotifications((prev) => [...prev, { id, type, title, message }]);
+    return id;
+  };
+
+  // Fonction pour supprimer des notifications
+  const removeNotification = (id: number) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   useEffect(() => {
     console.log("Initialisation du composant, chargement des données...");
     fetchLoans();
@@ -310,28 +420,62 @@ export default function EmployeeAssetsPage() {
     fetchUsers();
   }, []);
 
-  useEffect(() => {
-    console.log("Loans data:", loans);
-    console.log("Assets data:", assets);
-    console.log("Users data:", users);
-    console.log("Loans loading:", loansLoading);
-    console.log("Loans error:", loansError);
-  }, [loans, assets, users, loansLoading, loansError]);
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    // Validation avant soumission
+    if (!formData.user_id || formData.user_id === 0) {
+      addNotification(
+        "error",
+        "Erreur de validation",
+        "Veuillez sélectionner un employé"
+      );
+      return;
+    }
+
+    if (!formData.asset_id || formData.asset_id === 0) {
+      addNotification(
+        "error",
+        "Erreur de validation",
+        "Veuillez sélectionner un matériel"
+      );
+      return;
+    }
+
+    if (!formData.signature) {
+      addNotification(
+        "error",
+        "Signature requise",
+        "L'employé doit signer pour accepter le prêt"
+      );
+      return;
+    }
+
     setSubmitting(true);
     clearLoansError();
 
     try {
       console.log("Creating loan with data:", formData);
       await createLoan(formData);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Prêt créé",
+        "Le prêt de matériel a été créé avec succès"
+      );
+
       resetForm();
       setIsDialogOpen(false);
       fetchLoans();
       fetchAssets();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur création prêt:", err);
+      addNotification(
+        "error",
+        "Erreur",
+        err.response?.data?.message || "Impossible de créer le prêt"
+      );
     } finally {
       setSubmitting(false);
     }
@@ -339,18 +483,40 @@ export default function EmployeeAssetsPage() {
 
   const handleReturn = async (e: FormEvent) => {
     e.preventDefault();
+
+    // Demander confirmation
+    const confirmed = window.confirm("Confirmer le retour de ce matériel ?");
+
+    if (!confirmed) {
+      addNotification(
+        "warning",
+        "Retour annulé",
+        "Le matériel n'a pas été retourné"
+      );
+      return;
+    }
+
     setSubmitting(true);
     clearLoansError();
 
     try {
       console.log("Returning loan:", selectedLoan?.id);
       await returnLoan(selectedLoan.id, new Date().toISOString().split("T")[0]);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Matériel retourné",
+        `Le matériel "${selectedLoan.asset?.name}" a été retourné avec succès`
+      );
+
       setIsReturnDialogOpen(false);
       setSelectedLoan(null);
       fetchLoans();
       fetchAssets();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erreur retour prêt:", err);
+      addNotification("error", "Erreur", "Impossible de retourner le matériel");
     } finally {
       setSubmitting(false);
     }
@@ -470,24 +636,89 @@ export default function EmployeeAssetsPage() {
   };
 
   // Fonction pour supprimer un prêt
-  const handleDeleteLoan = async (loanId: number) => {
-    if (
-      confirm(
-        "Êtes-vous sûr de vouloir supprimer ce prêt ? Cette action est irréversible."
-      )
-    ) {
-      try {
-        await deleteLoan(loanId);
-        setShowLoanDetails(false);
-        setTimeout(() => fetchLoans(), 100);
-      } catch (err) {
-        console.error("Erreur suppression prêt:", err);
-      }
+  const handleDeleteLoan = async (loanId: number, loanName?: string) => {
+    const confirmed = window.confirm(
+      `Êtes-vous sûr de vouloir supprimer le prêt de "${
+        loanName || "ce matériel"
+      }" ? Cette action est irréversible.`
+    );
+
+    if (!confirmed) {
+      addNotification(
+        "warning",
+        "Suppression annulée",
+        "Le prêt n'a pas été supprimé"
+      );
+      return;
+    }
+
+    try {
+      await deleteLoan(loanId);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Prêt supprimé",
+        "Le prêt a été supprimé avec succès"
+      );
+
+      setShowLoanDetails(false);
+      setTimeout(() => fetchLoans(), 100);
+    } catch (err: any) {
+      console.error("Erreur suppression prêt:", err);
+      addNotification("error", "Erreur", "Impossible de supprimer le prêt");
+    }
+  };
+
+  // Fonction pour supprimer un prêt depuis la liste
+  const handleDeleteFromList = async (loan: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    const confirmed = window.confirm(
+      `Êtes-vous sûr de vouloir supprimer le prêt de "${
+        loan.asset?.name || "ce matériel"
+      }" ?`
+    );
+
+    if (!confirmed) {
+      addNotification(
+        "warning",
+        "Suppression annulée",
+        "Le prêt n'a pas été supprimé"
+      );
+      return;
+    }
+
+    try {
+      await deleteLoan(loan.id);
+
+      // Notification de succès
+      addNotification(
+        "success",
+        "Prêt supprimé",
+        "Le prêt a été supprimé avec succès"
+      );
+
+      setTimeout(() => fetchLoans(), 100);
+    } catch (err: any) {
+      console.error("Erreur suppression prêt:", err);
+      addNotification("error", "Erreur", "Impossible de supprimer le prêt");
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50/30 p-6">
+      {/* Afficher les notifications */}
+      {notifications.map((notification) => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          title={notification.title}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">
@@ -701,8 +932,13 @@ export default function EmployeeAssetsPage() {
                     type="button"
                     variant="outline"
                     onClick={() => {
-                      resetForm();
-                      setIsDialogOpen(false);
+                      const confirmed = window.confirm(
+                        "Annuler la création du prêt ? Les données saisies seront perdues."
+                      );
+                      if (confirmed) {
+                        resetForm();
+                        setIsDialogOpen(false);
+                      }
                     }}
                   >
                     Annuler
@@ -929,24 +1165,27 @@ export default function EmployeeAssetsPage() {
                       <DropdownMenuContent align="end">
                         {loan.signature && (
                           <DropdownMenuItem
-                            onClick={() => handleViewSignature(loan.signature)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewSignature(loan.signature);
+                            }}
                           >
-                            <User className="h-4 w-4 mr-2" />
+                            <CheckCircle className="h-4 w-4 mr-2" />
                             Voir la signature
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
-                          className="text-red-600"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                "Êtes-vous sûr de vouloir supprimer ce prêt ?"
-                              )
-                            ) {
-                              deleteLoan(loan.id);
-                              setTimeout(() => fetchLoans(), 100);
-                            }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            showLoanDetail(loan);
                           }}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Détails
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => handleDeleteFromList(loan, e)}
+                          className="text-red-600"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Supprimer
@@ -961,277 +1200,241 @@ export default function EmployeeAssetsPage() {
         ) : (
           <Card>
             <CardContent className="p-8 text-center">
-              <Laptop className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">
-                Aucun prêt enregistré
-              </h3>
-              <p className="text-gray-500 mb-4">
-                {searchTerm || activeTab !== "all"
-                  ? "Aucun prêt ne correspond à vos critères"
-                  : "Commencez par créer votre premier prêt de matériel"}
-              </p>
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => setIsDialogOpen(true)}
-                disabled={
-                  availableAssets.length === 0 || activeUsers.length === 0
-                }
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nouveau Prêt
-              </Button>
+              <div className="mx-auto max-w-md">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Laptop className="h-8 w-8 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">
+                  {searchTerm ? "Aucun prêt trouvé" : "Aucun prêt enregistré"}
+                </h3>
+                <p className="text-gray-500 mb-4">
+                  {searchTerm
+                    ? "Aucun résultat pour votre recherche. Essayez avec d'autres termes."
+                    : "Commencez par créer un nouveau prêt de matériel."}
+                </p>
+                {!searchTerm && (
+                  <Button
+                    onClick={() => setIsDialogOpen(true)}
+                    disabled={
+                      availableAssets.length === 0 || activeUsers.length === 0
+                    }
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Créer un prêt
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* Dialog pour afficher les détails d'un prêt spécifique */}
-      <Dialog open={showLoanDetails} onOpenChange={setShowLoanDetails}>
-        <DialogContent className="max-w-2xl">
+      {/* Dialogue de retour de matériel */}
+      <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
+        <DialogContent>
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle>
-                  Détails du prêt #{selectedLoanDetails?.id}
-                </DialogTitle>
-                <DialogDescription>
-                  Informations complètes sur ce prêt de matériel
-                </DialogDescription>
-              </div>
-             
-            </div>
+            <DialogTitle>Retour de matériel</DialogTitle>
+            <DialogDescription>
+              Confirmer le retour du matériel emprunté
+            </DialogDescription>
           </DialogHeader>
-
-          {selectedLoanDetails && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-2 gap-5">
-                {/* Matériel */}
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
-                      Matériel
-                    </h3>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <Laptop className="h-5 w-5 text-blue-500" />
-                          <div>
-                            <p className="font-semibold">
-                              {selectedLoanDetails.asset?.name || "N/A"}
-                            </p>
-                            {selectedLoanDetails.asset?.serial_number && (
-                              <p className="text-sm text-gray-600">
-                                N° série:{" "}
-                                {selectedLoanDetails.asset.serial_number}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+          {selectedLoan && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-semibold mb-2">Détails du prêt</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Matériel:</span>
+                    <span className="font-medium">
+                      {selectedLoan.asset?.name}
+                    </span>
                   </div>
-
-                  <div>
-                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
-                      Employé
-                    </h3>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <User className="h-5 w-5 text-blue-500" />
-                          <div>
-                            <p className="font-semibold">
-                              {selectedLoanDetails.user?.name || "N/A"}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              {selectedLoanDetails.user?.email || "N/A"}
-                            </p>
-                            {selectedLoanDetails.user?.role && (
-                              <Badge variant="outline" className="mt-1">
-                                {selectedLoanDetails.user.role}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Employé:</span>
+                    <span className="font-medium">
+                      {selectedLoan.user?.name}
+                    </span>
                   </div>
-                </div>
-
-                {/* Dates et statut */}
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
-                      Dates
-                    </h3>
-                    <Card>
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">
-                            Date de prêt:
-                          </span>
-                          <span className="font-medium">
-                            {formatDate(selectedLoanDetails.loan_date)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">
-                            Retour prévu:
-                          </span>
-                          <span
-                            className={`font-medium ${
-                              isOverdue(selectedLoanDetails.due_date) &&
-                              selectedLoanDetails.status === "en_cours"
-                                ? "text-red-600"
-                                : ""
-                            }`}
-                          >
-                            {formatDate(selectedLoanDetails.due_date)}
-                          </span>
-                        </div>
-                        {selectedLoanDetails.return_date && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">
-                              Date de retour:
-                            </span>
-                            <span className="font-medium text-green-600">
-                              {formatDate(selectedLoanDetails.return_date)}
-                            </span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Date de prêt:</span>
+                    <span>{formatDate(selectedLoan.loan_date)}</span>
                   </div>
-
-                  <div>
-                    <h3 className="font-semibold text-sm text-gray-500 mb-2">
-                      Statut
-                    </h3>
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <Badge
-                              className={getStatusColor(
-                                selectedLoanDetails.status
-                              )}
-                            >
-                              {selectedLoanDetails.status === "en_cours"
-                                ? "En cours"
-                                : "Terminé"}
-                            </Badge>
-                            {isOverdue(selectedLoanDetails.due_date) &&
-                              selectedLoanDetails.status === "en_cours" && (
-                                <Badge
-                                  variant="outline"
-                                  className="bg-red-100 text-red-800 border-red-200"
-                                >
-                                  En retard
-                                </Badge>
-                              )}
-                          </div>
-                          {selectedLoanDetails.signature && (
-                            <Badge
-                              variant="outline"
-                              className="bg-green-50 text-green-700 border-green-200"
-                            >
-                              Signé
-                            </Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      Date de retour prévue:
+                    </span>
+                    <span
+                      className={
+                        isOverdue(selectedLoan.due_date)
+                          ? "text-red-600 font-medium"
+                          : ""
+                      }
+                    >
+                      {formatDate(selectedLoan.due_date)}
+                    </span>
                   </div>
                 </div>
               </div>
-
-              {/* Signature */}
-              {selectedLoanDetails.signature && (
-                <div>
-                  <h3 className="font-semibold text-sm text-gray-500 mb-2">
-                    Signature de l'employé
-                  </h3>
-                  <Card>
-                    <CardContent className="">
-                      <div className="flex flex-col items-center">
-                        <img
-                          src={selectedLoanDetails.signature}
-                          alt="Signature"
-                          className=" max-h-20 object-contain border rounded"
-                        />
-                       
-                      </div>
-                    </CardContent>
-                  </Card>
+              <form onSubmit={handleReturn}>
+                <div className="space-y-2">
+                  <Label>Date de retour effective *</Label>
+                  <Input
+                    type="date"
+                    required
+                    defaultValue={new Date().toISOString().split("T")[0]}
+                    max={new Date().toISOString().split("T")[0]}
+                  />
                 </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t">
-                {selectedLoanDetails.status === "en_cours" && (
+                <DialogFooter className="mt-6">
                   <Button
-                    className="flex-1"
-                    onClick={() => {
-                      setSelectedLoan(selectedLoanDetails);
-                      setShowLoanDetails(false);
-                      setIsReturnDialogOpen(true);
-                    }}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsReturnDialogOpen(false)}
                   >
-                    Retourner le matériel
+                    Annuler
                   </Button>
-                )}
-                <Button
-                  variant="outline"
-                  className="flex-1 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border-red-200"
-                  onClick={() => handleDeleteLoan(selectedLoanDetails.id)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Supprimer
-                </Button>
-               
-              </div>
+                  <Button
+                    type="submit"
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Confirmer le retour"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de retour */}
-      <Dialog open={isReturnDialogOpen} onOpenChange={setIsReturnDialogOpen}>
-        <DialogContent className="max-w-md">
+      {/* Dialogue de détails du prêt */}
+      <Dialog open={showLoanDetails} onOpenChange={setShowLoanDetails}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Retour de Matériel</DialogTitle>
+            <DialogTitle>Détails du prêt</DialogTitle>
             <DialogDescription>
-              Confirmez le retour du matériel "
-              {selectedLoan?.asset?.name || "Matériel"}" par{" "}
-              {selectedLoan?.user?.name || "Utilisateur"}
+              Informations complètes sur ce prêt de matériel
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleReturn}>
-            <div className="space-y-4">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  Le matériel sera marqué comme retourné et disponible pour de
-                  nouveaux prêts.
-                </p>
+          {selectedLoanDetails && (
+            <div className="space-y-6">
+              {/* En-tête avec statut */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold">
+                    {selectedLoanDetails.asset?.name}
+                  </h3>
+                  <p className="text-gray-600">
+                    Prêt à {selectedLoanDetails.user?.name}
+                  </p>
+                </div>
+                <Badge className={getStatusColor(selectedLoanDetails.status)}>
+                  {selectedLoanDetails.status === "en_cours"
+                    ? "En cours"
+                    : "Terminé"}
+                </Badge>
+              </div>
+
+              {/* Dates */}
+              <Card>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Date de prêt</p>
+                      <p className="font-medium">
+                        {formatDate(selectedLoanDetails.loan_date)}
+                      </p>
+                    </div>
+                    {selectedLoanDetails.due_date && (
+                      <div>
+                        <p className="text-sm text-gray-600">Retour prévu</p>
+                        <p
+                          className={`font-medium ${
+                            isOverdue(selectedLoanDetails.due_date) &&
+                            selectedLoanDetails.status === "en_cours"
+                              ? "text-red-600"
+                              : ""
+                          }`}
+                        >
+                          {formatDate(selectedLoanDetails.due_date)}
+                        </p>
+                      </div>
+                    )}
+                    {selectedLoanDetails.return_date && (
+                      <div>
+                        <p className="text-sm text-gray-600">Retour effectif</p>
+                        <p className="font-medium">
+                          {formatDate(selectedLoanDetails.return_date)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Signature */}
+              {selectedLoanDetails.signature && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Signature</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div>
+                      <div className="border rounded  bg-white">
+                        <img
+                          src={selectedLoanDetails.signature}
+                          alt="Signature"
+                          className="max-h-32 mx-auto"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                {selectedLoanDetails.status === "en_cours" && (
+                  <Button
+                    onClick={() => {
+                      setSelectedLoan(selectedLoanDetails);
+                      setShowLoanDetails(false);
+                      setIsReturnDialogOpen(true);
+                    }}
+                    className="bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    Retourner le matériel
+                  </Button>
+                )}
+
+                <Button
+                  variant="destructive"
+                  onClick={() =>
+                    handleDeleteLoan(
+                      selectedLoanDetails.id,
+                      selectedLoanDetails.asset?.name
+                    )
+                  }
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Supprimer
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowLoanDetails(false);
+                    setSelectedLoanDetails(null);
+                  }}
+                >
+                  Fermer
+                </Button>
               </div>
             </div>
-            <DialogFooter className="mt-6">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsReturnDialogOpen(false)}
-              >
-                Annuler
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Confirmer le retour"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

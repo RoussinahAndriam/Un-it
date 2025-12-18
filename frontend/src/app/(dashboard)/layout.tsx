@@ -6,6 +6,21 @@ import Sidebar from "@/components/Sidebar";
 import { AuthProvider } from "@/context/AuthContext";
 import { Toaster } from "sonner";
 
+
+
+
+<Toaster 
+  position="top-right"
+  toastOptions={{
+    duration: 4000,
+    style: {
+      background: '#fff',
+      color: '#333',
+      border: '1px solid #e5e7eb',
+      borderRadius: '8px',
+    },
+  }}
+/>
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
